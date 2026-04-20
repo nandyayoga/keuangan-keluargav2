@@ -362,22 +362,20 @@ function App(){
     load();
   },[]);
 
-  // Persist langsung tanpa bergantung closure state
-  const persistDirect = (newEntries, newNextId) => {
-    try {
-      const payload = JSON.stringify({
-        entries: newEntries,
-        estimates,
-        nextId: newNextId,
-        recurringList,
-        archives,
-        favorites,
-        auditLog
-      });
-      storage.set(DATA_KEY, payload);
-      setSaveStatus("☁️ Tersimpan");
-      setTimeout(()=>setSaveStatus(""),2000);
-    } catch { setSaveStatus("⚠ Gagal"); }
+  // Helper save ke storage - hanya dipanggil SEKALI per aksi
+  const saveToStorage = (newEntries, newNextId) => {
+    const payload = {
+      entries: newEntries,
+      estimates,
+      nextId: newNextId ?? nextIdRef.current,
+      recurringList,
+      archives,
+      favorites,
+      auditLog
+    };
+    storage.set(DATA_KEY, JSON.stringify(payload))
+      .then(()=>{setSaveStatus("☁️ Tersimpan");setTimeout(()=>setSaveStatus(""),2000);})
+      .catch(()=>setSaveStatus("⚠ Gagal"));
   };
 
   const persist=async(e,est,nid,rec,arc,fav,alog)=>{
@@ -385,6 +383,14 @@ function App(){
       await storage.set(DATA_KEY,JSON.stringify({entries:e,estimates:est,nextId:nid,recurringList:rec,archives:arc,favorites:fav,auditLog:alog}));
       setSaveStatus("☁️ Tersimpan");setTimeout(()=>setSaveStatus(""),2000);
     }catch{setSaveStatus("⚠ Gagal");}
+  };
+
+  // updEntries: update state saja, persist terpisah
+  const updEntries = fn => {
+    setEntries(prev => {
+      const n = typeof fn === "function" ? fn(prev) : fn;
+      return n;
+    });
   };
   const updEntries   = fn=>setEntries(prev=>{const n=typeof fn==="function"?fn(prev):fn;persist(n,estimates,nextId,recurringList,archives,favorites,auditLog);return n;});
   const updEstimates = fn=>setEstimates(prev=>{const n=typeof fn==="function"?fn(prev):fn;persist(entries,n,nextId,recurringList,archives,favorites,auditLog);return n;});
@@ -431,8 +437,12 @@ function App(){
   const recordRecurring=r=>{
     const now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,"0"),d=String(r.dayOfMonth).padStart(2,"0");
     const entry={date:`${y}-${m}-${d}`,desc:r.desc,category:r.category,amount:r.amount,pic:r.pic,type:getType(r.category),note:""};
-    const nid=nextId;setNextId(n=>n+1);
-    updEntries(p=>[...p,{...entry,id:nid}]);
+    const nid=nextIdRef.current;
+    nextIdRef.current=nid+1;
+    setNextId(nid+1);
+    const newEntries=[...entries,{...entry,id:nid}];
+    setEntries(newEntries);
+    saveToStorage(newEntries,nid+1);
     addAudit("ADD",`Catat rutin: ${r.desc} · ${fmt(r.amount)}`);
     setRecurringReminder(p=>p.filter(x=>x.id!==r.id));
     showToast(`✅ Dicatat: ${r.desc} · ${fmt(r.amount)}`);
@@ -491,29 +501,26 @@ function App(){
     if(!validateForm())return;
     const entry={...form,amount:toNum(form.amount),type:getType(form.category)};
     const isEdit=editId!==null;
+    const eid=editId;
 
+    // Reset UI
+    setEditId(null);
     setForm(EMPTY_FORM);
     setShowForm(false);
 
     if(isEdit){
-      const eid=editId;
-      setEditId(null);
-      setEntries(prev=>{
-        const updated=prev.map(e=>e.id===eid?{...entry,id:eid}:e);
-        persist(updated,estimates,nextIdRef.current,recurringList,archives,favorites,auditLog);
-        return updated;
-      });
+      const updated=entries.map(e=>e.id===eid?{...entry,id:eid}:e);
+      setEntries(updated);
+      saveToStorage(updated);
       addAudit("EDIT",`Edit: ${entry.desc} · ${fmt(entry.amount)}`);
       showToast(`✏️ Diperbarui: ${entry.desc} · ${fmt(entry.amount)}`);
     } else {
-      const nid = nextIdRef.current;
-      nextIdRef.current = nid + 1;
-      setNextId(nid + 1);
-      setEntries(prev=>{
-        const updated=[...prev,{...entry,id:nid}];
-        persist(updated,estimates,nid+1,recurringList,archives,favorites,auditLog);
-        return updated;
-      });
+      const nid=nextIdRef.current;
+      nextIdRef.current=nid+1;
+      setNextId(nid+1);
+      const updated=[...entries,{...entry,id:nid}];
+      setEntries(updated);
+      saveToStorage(updated,nid+1);
       addAudit("ADD",`Tambah: ${entry.desc} · ${fmt(entry.amount)}`);
       showToast(`✅ Ditambahkan: ${entry.desc} · ${fmt(entry.amount)}`);
       if(entry.type==="expense"){
@@ -526,8 +533,21 @@ function App(){
     }
   };
   const handleEdit=e=>{setForm({...e,amount:String(e.amount)});setEditId(e.id);setShowForm(true);window.scrollTo({top:0,behavior:"smooth"});};
-  const handleDelete=id=>{const e=entries.find(x=>x.id===id);showConfirm("Hapus entri ini?",()=>{updEntries(p=>p.filter(x=>x.id!==id));addAudit("DELETE",`Hapus: ${e?.desc}`);});};
-  const clearAll=()=>showConfirm("Hapus SEMUA data?",()=>{setEntries([]);setNextId(1);persist([],estimates,1,recurringList,archives,favorites,[]);});
+  const handleDelete=id=>{
+    const e=entries.find(x=>x.id===id);
+    showConfirm("Hapus entri ini?",()=>{
+      const newEntries=entries.filter(x=>x.id!==id);
+      setEntries(newEntries);
+      saveToStorage(newEntries);
+      addAudit("DELETE",`Hapus: ${e?.desc}`);
+    });
+  };
+  const clearAll=()=>showConfirm("Hapus SEMUA data?",()=>{
+    setEntries([]);
+    nextIdRef.current=1;
+    setNextId(1);
+    persist([],estimates,1,recurringList,archives,favorites,[]);
+  });
 
   // Export/Import
   const triggerDL=(content,name,mime)=>{try{const b=new Blob([content],{type:mime}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);document.body.removeChild(a);},200);}catch{window.open(`data:${mime};charset=utf-8,`+encodeURIComponent(content),"_blank");}};
