@@ -287,6 +287,7 @@ function App(){
   const [entries,setEntries]         = useState(SAMPLE_ENTRIES);
   const [estimates,setEstimates]     = useState(DEFAULT_EST);
   const [nextId,setNextId]           = useState(88);
+  const nextIdRef                    = useRef(88);
   const [form,setForm]               = useState(EMPTY_FORM);
   const [editId,setEditId]           = useState(null);
   const [showForm,setShowForm]       = useState(false);
@@ -340,7 +341,7 @@ function App(){
           const d=JSON.parse(dataR.value);
           if(d.entries)setEntries(d.entries);
           if(d.estimates)setEstimates(d.estimates);
-          if(d.nextId)setNextId(d.nextId);
+          if(d.nextId){setNextId(d.nextId);nextIdRef.current=d.nextId;}
           if(d.recurringList)setRecurringList(d.recurringList);
           if(d.archives)setArchives(d.archives);
           if(d.favorites)setFavorites(d.favorites);
@@ -353,13 +354,31 @@ function App(){
         try{
           const pin=localStorage.getItem(PIN_KEY);
           const data=localStorage.getItem(DATA_KEY);
-          if(data){const d=JSON.parse(data);if(d.entries)setEntries(d.entries);if(d.estimates)setEstimates(d.estimates);if(d.nextId)setNextId(d.nextId);if(d.recurringList)setRecurringList(d.recurringList);if(d.archives)setArchives(d.archives);if(d.favorites)setFavorites(d.favorites);if(d.auditLog)setAuditLog(d.auditLog);}
+          if(data){const d=JSON.parse(data);if(d.entries)setEntries(d.entries);if(d.estimates)setEstimates(d.estimates);if(d.nextId){setNextId(d.nextId);nextIdRef.current=d.nextId;}if(d.recurringList)setRecurringList(d.recurringList);if(d.archives)setArchives(d.archives);if(d.favorites)setFavorites(d.favorites);if(d.auditLog)setAuditLog(d.auditLog);}
           setStoredPin(pin);setAppState(pin?"pin":"app");
         }catch{setAppState("app");}
       }
     };
     load();
   },[]);
+
+  // Persist langsung tanpa bergantung closure state
+  const persistDirect = (newEntries, newNextId) => {
+    try {
+      const payload = JSON.stringify({
+        entries: newEntries,
+        estimates,
+        nextId: newNextId,
+        recurringList,
+        archives,
+        favorites,
+        auditLog
+      });
+      storage.set(DATA_KEY, payload);
+      setSaveStatus("☁️ Tersimpan");
+      setTimeout(()=>setSaveStatus(""),2000);
+    } catch { setSaveStatus("⚠ Gagal"); }
+  };
 
   const persist=async(e,est,nid,rec,arc,fav,alog)=>{
     try{
@@ -473,34 +492,30 @@ function App(){
     const entry={...form,amount:toNum(form.amount),type:getType(form.category)};
     const isEdit=editId!==null;
 
+    setForm(EMPTY_FORM);
+    setShowForm(false);
+
     if(isEdit){
-      // Edit: langsung update array tanpa nextId
       const eid=editId;
       setEditId(null);
-      setForm(EMPTY_FORM);
-      setShowForm(false);
       setEntries(prev=>{
         const updated=prev.map(e=>e.id===eid?{...entry,id:eid}:e);
-        persist(updated,estimates,nextId,recurringList,archives,favorites,auditLog);
+        persist(updated,estimates,nextIdRef.current,recurringList,archives,favorites,auditLog);
         return updated;
       });
       addAudit("EDIT",`Edit: ${entry.desc} · ${fmt(entry.amount)}`);
       showToast(`✏️ Diperbarui: ${entry.desc} · ${fmt(entry.amount)}`);
     } else {
-      // Tambah baru: gunakan nextId snapshot
-      const nid=nextId;
-      const newNextId=nextId+1;
-      setNextId(newNextId);
-      setForm(EMPTY_FORM);
-      setShowForm(false);
+      const nid = nextIdRef.current;
+      nextIdRef.current = nid + 1;
+      setNextId(nid + 1);
       setEntries(prev=>{
         const updated=[...prev,{...entry,id:nid}];
-        persist(updated,estimates,newNextId,recurringList,archives,favorites,auditLog);
+        persist(updated,estimates,nid+1,recurringList,archives,favorites,auditLog);
         return updated;
       });
       addAudit("ADD",`Tambah: ${entry.desc} · ${fmt(entry.amount)}`);
       showToast(`✅ Ditambahkan: ${entry.desc} · ${fmt(entry.amount)}`);
-      // Cek budget alert (pakai catTotals saat ini + amount baru)
       if(entry.type==="expense"){
         const est=estimates[entry.category]||0;
         if(est>0){
