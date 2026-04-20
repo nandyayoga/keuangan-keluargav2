@@ -472,11 +472,43 @@ function App(){
     if(!validateForm())return;
     const entry={...form,amount:toNum(form.amount),type:getType(form.category)};
     const isEdit=editId!==null;
-    if(isEdit){updEntries(p=>p.map(e=>e.id===editId?{...entry,id:editId}:e));setEditId(null);addAudit("EDIT",`Edit: ${entry.desc}`);}
-    else{const nid=nextId;updEntries(p=>[...p,{...entry,id:nid}]);setNextId(n=>n+1);addAudit("ADD",`Tambah: ${entry.desc} · ${fmt(entry.amount)}`);}
-    setForm(EMPTY_FORM);setShowForm(false);
-    showToast(`${isEdit?"✏️":"✅"} ${entry.desc} · ${fmt(entry.amount)}`);
-    if(entry.type==="expense"){const est=estimates[entry.category]||0;if(est>0){const cur=(catTotals[entry.category]||0)+(isEdit?0:entry.amount);if((cur/est)>1)setBudgetAlert({cat:entry.category,est,total:cur});}}
+
+    if(isEdit){
+      // Edit: langsung update array tanpa nextId
+      const eid=editId;
+      setEditId(null);
+      setForm(EMPTY_FORM);
+      setShowForm(false);
+      setEntries(prev=>{
+        const updated=prev.map(e=>e.id===eid?{...entry,id:eid}:e);
+        persist(updated,estimates,nextId,recurringList,archives,favorites,auditLog);
+        return updated;
+      });
+      addAudit("EDIT",`Edit: ${entry.desc} · ${fmt(entry.amount)}`);
+      showToast(`✏️ Diperbarui: ${entry.desc} · ${fmt(entry.amount)}`);
+    } else {
+      // Tambah baru: gunakan nextId snapshot
+      const nid=nextId;
+      const newNextId=nextId+1;
+      setNextId(newNextId);
+      setForm(EMPTY_FORM);
+      setShowForm(false);
+      setEntries(prev=>{
+        const updated=[...prev,{...entry,id:nid}];
+        persist(updated,estimates,newNextId,recurringList,archives,favorites,auditLog);
+        return updated;
+      });
+      addAudit("ADD",`Tambah: ${entry.desc} · ${fmt(entry.amount)}`);
+      showToast(`✅ Ditambahkan: ${entry.desc} · ${fmt(entry.amount)}`);
+      // Cek budget alert (pakai catTotals saat ini + amount baru)
+      if(entry.type==="expense"){
+        const est=estimates[entry.category]||0;
+        if(est>0){
+          const cur=(catTotals[entry.category]||0)+entry.amount;
+          if((cur/est)>1)setBudgetAlert({cat:entry.category,est,total:cur});
+        }
+      }
+    }
   };
   const handleEdit=e=>{setForm({...e,amount:String(e.amount)});setEditId(e.id);setShowForm(true);window.scrollTo({top:0,behavior:"smooth"});};
   const handleDelete=id=>{const e=entries.find(x=>x.id===id);showConfirm("Hapus entri ini?",()=>{updEntries(p=>p.filter(x=>x.id!==id));addAudit("DELETE",`Hapus: ${e?.desc}`);});};
