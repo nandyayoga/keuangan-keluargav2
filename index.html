@@ -47,7 +47,7 @@ body{margin:0;font-family:system-ui,sans-serif;background:#f9fafb;}
 const {useState,useMemo,useEffect,useRef} = React;
 const {BarChart,Bar,XAxis,YAxis,Tooltip,ResponsiveContainer,Legend} = Recharts;
 
-// ─── Constants (ALL outside App) ──────────────────────────────
+// ─── Constants ────────────────────────────────────────────────
 const EXPENSE_CATS  = ["Cicilan Rumah","Tabungan","Beban Bulanan","Belanja Rumah Tangga","Nafkah Istri","Biaya Entertainment","Orang Tua","Biaya Transportasi","Sedekah/Zakat","Kesehatan","Penunjang kerja suami","Kebutuhan Pribadi Istri","Lainnya"];
 const INCOME_CATS   = ["Gaji","Uang Makan","Pendapatan Lainnya"];
 const TRANSFER_CATS = ["Pindah Ke Suami","Pindah Ke Istri"];
@@ -56,7 +56,6 @@ const PICs          = ["Bersama","Suami","Istri"];
 const EMPTY_FORM    = {date:"",desc:"",category:"Belanja Rumah Tangga",type:"expense",amount:"",pic:"Bersama",note:""};
 const EMPTY_REC     = {desc:"",category:"Beban Bulanan",amount:"",pic:"Bersama",dayOfMonth:1,active:true};
 const DEFAULT_EST   = {"Cicilan Rumah":6360880,"Tabungan":0,"Beban Bulanan":2463450,"Belanja Rumah Tangga":4815811,"Nafkah Istri":1200000,"Biaya Entertainment":800000,"Orang Tua":1500000,"Biaya Transportasi":1000000,"Sedekah/Zakat":150000,"Kesehatan":200000,"Penunjang kerja suami":700000,"Kebutuhan Pribadi Istri":500000,"Lainnya":500000};
-
 const SAMPLE_ENTRIES = [
   {id:1, date:"2026-03-25",category:"Gaji",desc:"Gaji Maret '26",type:"income",amount:18184752,pic:"Bersama",note:"Maret'26"},
   {id:2, date:"2026-03-25",category:"Pendapatan Lainnya",desc:"Pindahan dari maret'26",type:"income",amount:575812,pic:"Bersama",note:""},
@@ -143,7 +142,6 @@ const SAMPLE_ENTRIES = [
   {id:86,date:"2026-04-02",category:"Belanja Rumah Tangga",desc:"Bawang putih tunggal",type:"expense",amount:171000,pic:"Istri",note:""},
   {id:87,date:"2026-04-02",category:"Kebutuhan Pribadi Istri",desc:"Item pribadi istri",type:"expense",amount:201000,pic:"Istri",note:""},
 ];
-
 const DEFAULT_REC = [
   {id:1,desc:"KPR",category:"Cicilan Rumah",amount:6360880,pic:"Bersama",dayOfMonth:25,active:true},
   {id:2,desc:"Indihome",category:"Beban Bulanan",amount:252750,pic:"Bersama",dayOfMonth:5,active:true},
@@ -162,7 +160,6 @@ const getType  = cat => INCOME_CATS.includes(cat)?"income":TRANSFER_CATS.include
 const toStr    = d => { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0"); return`${y}-${m}-${day}`; };
 const todayStr = () => toStr(new Date());
 const fmtK     = v => v>=1000000?`${(v/1000000).toFixed(1)}jt`:v>=1000?`${(v/1000).toFixed(0)}rb`:`${v}`;
-
 const trafficLight = pct => {
   if(pct>=100) return {bg:"bg-red-100",border:"border-red-400",text:"text-red-700",bar:"#dc2626",label:"🔴 Over"};
   if(pct>=85)  return {bg:"bg-orange-100",border:"border-orange-400",text:"text-orange-700",bar:"#f97316",label:"🟠 Hampir"};
@@ -190,14 +187,16 @@ const getCurrentPeriod = () => {
   return{from:toStr(s),to:toStr(e)};
 };
 
-const storage = {
+// ─── Storage ──────────────────────────────────────────────────
+const fbStorage = {
   get: async k => {
     if(window._fbReady&&window._fbGet){const v=await window._fbGet(k);if(v!==null)return{value:v};}
     const v=localStorage.getItem(k); return v?{value:v}:null;
   },
   set: async (k,v) => {
+    localStorage.setItem(k,v);
     if(window._fbReady&&window._fbSet) await window._fbSet(k,v);
-    localStorage.setItem(k,v); return true;
+    return true;
   }
 };
 
@@ -282,12 +281,15 @@ function PinScreen({storedPin,onSuccess}){
 
 // ─── Main App ─────────────────────────────────────────────────
 function App(){
+  // ── State ──
   const [appState,setAppState]       = useState("loading");
   const [storedPin,setStoredPin]     = useState(null);
   const [entries,setEntries]         = useState(SAMPLE_ENTRIES);
   const [estimates,setEstimates]     = useState(DEFAULT_EST);
-  const [nextId,setNextId]           = useState(88);
-  const nextIdRef                    = useRef(88);
+  const [recurringList,setRecurringList] = useState(DEFAULT_REC);
+  const [archives,setArchives]       = useState([]);
+  const [favorites,setFavorites]     = useState([]);
+  const [auditLog,setAuditLog]       = useState([]);
   const [form,setForm]               = useState(EMPTY_FORM);
   const [editId,setEditId]           = useState(null);
   const [showForm,setShowForm]       = useState(false);
@@ -304,22 +306,21 @@ function App(){
   const [confirmDialog,setConfirmDialog] = useState(null);
   const [budgetAlert,setBudgetAlert] = useState(null);
   const [toast,setToast]             = useState(null);
-  const [favorites,setFavorites]     = useState([]);
   const [acSuggestions,setAcSuggestions] = useState([]);
   const [showAC,setShowAC]           = useState(false);
   const [acIndex,setAcIndex]         = useState(-1);
-  const [recurringList,setRecurringList] = useState(DEFAULT_REC);
   const [recurringReminder,setRecurringReminder] = useState([]);
   const [showReminderPopup,setShowReminderPopup] = useState(false);
   const [recurringForm,setRecurringForm] = useState(null);
-  const [nextRecurringId,setNextRecurringId] = useState(8);
-  const [auditLog,setAuditLog]       = useState([]);
-  const [archives,setArchives]       = useState([]);
   const [viewArchive,setViewArchive] = useState(null);
   const [fbStatus,setFbStatus]       = useState("connecting");
-  const descRef = useRef(null);
+
+  // nextId sebagai ref — tidak trigger re-render, tidak stale
+  const nextIdRef = useRef(88);
+
   const PIN_KEY="kk_pin", DATA_KEY="kk_data";
 
+  // ── Helpers ──
   const showConfirm = (msg,onOk) => setConfirmDialog({msg,onOk});
   const showToast   = (msg,type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
   const addAudit    = (action,desc) => setAuditLog(p=>[{id:Date.now(),action,desc,time:new Date().toLocaleString("id-ID")},...p].slice(0,50));
@@ -329,77 +330,78 @@ function App(){
     return`${M[parseInt(fm)-1]} ${fy} — ${M[parseInt(tm)-1]} ${ty}`;
   };
 
-  // Load from Firebase
+  // ── SATU fungsi persist, dipanggil SEKALI per aksi ──
+  // Menerima semua data eksplisit, tidak bergantung closure
+  const persistAll = (newEntries, newEstimates, newNextId, newRec, newArc, newFav, newLog) => {
+    const payload = JSON.stringify({
+      entries: newEntries,
+      estimates: newEstimates,
+      nextId: newNextId,
+      recurringList: newRec,
+      archives: newArc,
+      favorites: newFav,
+      auditLog: newLog
+    });
+    fbStorage.set(DATA_KEY, payload)
+      .then(()=>{setSaveStatus("☁️ Tersimpan");setTimeout(()=>setSaveStatus(""),2000);})
+      .catch(()=>setSaveStatus("⚠ Gagal"));
+  };
+
+  // ── Load data ──
   useEffect(()=>{
     const load=async()=>{
       try{
-        if(!window._fbReady){await new Promise((res,rej)=>{const t=setTimeout(()=>rej("timeout"),5000);window.addEventListener("fb-ready",()=>{clearTimeout(t);res();},{once:true});});}
+        if(!window._fbReady){
+          await new Promise((res,rej)=>{
+            const t=setTimeout(()=>rej("timeout"),5000);
+            window.addEventListener("fb-ready",()=>{clearTimeout(t);res();},{once:true});
+          });
+        }
         setFbStatus("ok");
-        const pinR=await storage.get(PIN_KEY);
-        const dataR=await storage.get(DATA_KEY);
+        const pinR  = await fbStorage.get(PIN_KEY);
+        const dataR = await fbStorage.get(DATA_KEY);
         if(dataR?.value){
           const d=JSON.parse(dataR.value);
-          if(d.entries)setEntries(d.entries);
-          if(d.estimates)setEstimates(d.estimates);
-          if(d.nextId){setNextId(d.nextId);nextIdRef.current=d.nextId;}
+          if(d.entries)      setEntries(d.entries);
+          if(d.estimates)    setEstimates(d.estimates);
+          if(d.nextId)       nextIdRef.current=d.nextId;
           if(d.recurringList)setRecurringList(d.recurringList);
-          if(d.archives)setArchives(d.archives);
-          if(d.favorites)setFavorites(d.favorites);
-          if(d.auditLog)setAuditLog(d.auditLog);
+          if(d.archives)     setArchives(d.archives);
+          if(d.favorites)    setFavorites(d.favorites);
+          if(d.auditLog)     setAuditLog(d.auditLog);
         }
         const pin=pinR?.value||null;
-        setStoredPin(pin);setAppState(pin?"pin":"app");
+        setStoredPin(pin);
+        setAppState(pin?"pin":"app");
       }catch(e){
         setFbStatus("error");
         try{
           const pin=localStorage.getItem(PIN_KEY);
           const data=localStorage.getItem(DATA_KEY);
-          if(data){const d=JSON.parse(data);if(d.entries)setEntries(d.entries);if(d.estimates)setEstimates(d.estimates);if(d.nextId){setNextId(d.nextId);nextIdRef.current=d.nextId;}if(d.recurringList)setRecurringList(d.recurringList);if(d.archives)setArchives(d.archives);if(d.favorites)setFavorites(d.favorites);if(d.auditLog)setAuditLog(d.auditLog);}
-          setStoredPin(pin);setAppState(pin?"pin":"app");
+          if(data){
+            const d=JSON.parse(data);
+            if(d.entries)      setEntries(d.entries);
+            if(d.estimates)    setEstimates(d.estimates);
+            if(d.nextId)       nextIdRef.current=d.nextId;
+            if(d.recurringList)setRecurringList(d.recurringList);
+            if(d.archives)     setArchives(d.archives);
+            if(d.favorites)    setFavorites(d.favorites);
+            if(d.auditLog)     setAuditLog(d.auditLog);
+          }
+          setStoredPin(pin);
+          setAppState(pin?"pin":"app");
         }catch{setAppState("app");}
       }
     };
     load();
   },[]);
 
-  // Helper save ke storage - hanya dipanggil SEKALI per aksi
-  const saveToStorage = (newEntries, newNextId) => {
-    const payload = {
-      entries: newEntries,
-      estimates,
-      nextId: newNextId ?? nextIdRef.current,
-      recurringList,
-      archives,
-      favorites,
-      auditLog
-    };
-    storage.set(DATA_KEY, JSON.stringify(payload))
-      .then(()=>{setSaveStatus("☁️ Tersimpan");setTimeout(()=>setSaveStatus(""),2000);})
-      .catch(()=>setSaveStatus("⚠ Gagal"));
-  };
-
-  const persist=async(e,est,nid,rec,arc,fav,alog)=>{
-    try{
-      await storage.set(DATA_KEY,JSON.stringify({entries:e,estimates:est,nextId:nid,recurringList:rec,archives:arc,favorites:fav,auditLog:alog}));
-      setSaveStatus("☁️ Tersimpan");setTimeout(()=>setSaveStatus(""),2000);
-    }catch{setSaveStatus("⚠ Gagal");}
-  };
-
-  // updEntries: update state saja, persist terpisah
-  const updEntries = fn => {
-    setEntries(prev => {
-      const n = typeof fn === "function" ? fn(prev) : fn;
-      return n;
-    });
-  };
-  const updEntries   = fn=>setEntries(prev=>{const n=typeof fn==="function"?fn(prev):fn;persist(n,estimates,nextId,recurringList,archives,favorites,auditLog);return n;});
-  const updEstimates = fn=>setEstimates(prev=>{const n=typeof fn==="function"?fn(prev):fn;persist(entries,n,nextId,recurringList,archives,favorites,auditLog);return n;});
   const handlePinSuccess=async newPin=>{
-    if(newPin){const h=await hashPIN(newPin);await storage.set(PIN_KEY,h);setStoredPin(h);}
+    if(newPin){const h=await hashPIN(newPin);await fbStorage.set(PIN_KEY,h);setStoredPin(h);}
     setAppState("app");setShowChangePIN(false);
   };
 
-  // Derived
+  // ── Derived ──
   const sorted        = useMemo(()=>[...entries].sort((a,b)=>a.date.localeCompare(b.date)),[entries]);
   const periodEntries = useMemo(()=>useDateFilter?sorted.filter(e=>e.date>=dateFrom&&e.date<=dateTo):sorted,[sorted,useDateFilter,dateFrom,dateTo]);
   const filtered      = useMemo(()=>periodEntries.filter(e=>(filterPIC==="Semua"||e.pic===filterPIC)&&(filterCat==="Semua"||e.category===filterCat)),[periodEntries,filterPIC,filterCat]);
@@ -420,7 +422,7 @@ function App(){
   const totalEst      = EXPENSE_CATS.reduce((s,c)=>s+(estimates[c]||0),0);
   const totalReal     = EXPENSE_CATS.reduce((s,c)=>s+(catTotals[c]||0),0);
 
-  // Recurring check
+  // ── Recurring ──
   useEffect(()=>{
     if(appState!=="app")return;
     const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
@@ -436,33 +438,42 @@ function App(){
 
   const recordRecurring=r=>{
     const now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,"0"),d=String(r.dayOfMonth).padStart(2,"0");
-    const entry={date:`${y}-${m}-${d}`,desc:r.desc,category:r.category,amount:r.amount,pic:r.pic,type:getType(r.category),note:""};
-    const nid=nextIdRef.current;
-    nextIdRef.current=nid+1;
-    setNextId(nid+1);
-    const newEntries=[...entries,{...entry,id:nid}];
+    const entry={id:nextIdRef.current,date:`${y}-${m}-${d}`,desc:r.desc,category:r.category,amount:r.amount,pic:r.pic,type:getType(r.category),note:""};
+    nextIdRef.current++;
+    const newEntries=[...entries,entry];
     setEntries(newEntries);
-    saveToStorage(newEntries,nid+1);
+    persistAll(newEntries,estimates,nextIdRef.current,recurringList,archives,favorites,auditLog);
     addAudit("ADD",`Catat rutin: ${r.desc} · ${fmt(r.amount)}`);
     setRecurringReminder(p=>p.filter(x=>x.id!==r.id));
     showToast(`✅ Dicatat: ${r.desc} · ${fmt(r.amount)}`);
     if(recurringReminder.length<=1)setShowReminderPopup(false);
   };
+
   const saveRecurring=rf=>{
     if(!rf.desc||!rf.amount||rf.dayOfMonth<1||rf.dayOfMonth>31){showToast("⚠️ Lengkapi semua field!","error");return;}
-    let updated;
-    if(rf.id){updated=recurringList.map(r=>r.id===rf.id?{...rf,amount:toNum(String(rf.amount))}:r);showToast(`✅ Diperbarui: ${rf.desc}`);}
-    else{updated=[...recurringList,{...rf,id:nextRecurringId,amount:toNum(String(rf.amount))}];setNextRecurringId(n=>n+1);showToast(`✅ Ditambahkan: ${rf.desc}`);}
-    setRecurringList(updated);persist(entries,estimates,nextId,updated,archives,favorites,auditLog);setRecurringForm(null);
+    let newRec;
+    if(rf.id){newRec=recurringList.map(r=>r.id===rf.id?{...rf,amount:toNum(String(rf.amount))}:r);showToast(`✅ Diperbarui: ${rf.desc}`);}
+    else{
+      const rid=Math.max(0,...recurringList.map(r=>r.id))+1;
+      newRec=[...recurringList,{...rf,id:rid,amount:toNum(String(rf.amount))}];
+      showToast(`✅ Ditambahkan: ${rf.desc}`);
+    }
+    setRecurringList(newRec);
+    persistAll(entries,estimates,nextIdRef.current,newRec,archives,favorites,auditLog);
+    setRecurringForm(null);
   };
+
   const saveToArchive=()=>{
     if(!periodEntries.length){showToast("⚠️ Tidak ada transaksi","error");return;}
     if(archives.some(a=>a.from===dateFrom&&a.to===dateTo)){showToast("⚠️ Sudah diarsipkan","error");return;}
     const snap={id:Date.now(),label:getPeriodLabel(dateFrom,dateTo),from:dateFrom,to:dateTo,savedAt:new Date().toLocaleString("id-ID"),entries:periodEntries,estimates:{...estimates},summary:{totalIncome,totalExpense,totalTransfer,balance,suamiSaldo,istriSaldo,totalAset:balance+suamiSaldo+istriSaldo}};
-    const updated=[snap,...archives];setArchives(updated);
-    persist(entries,estimates,nextId,recurringList,updated,favorites,auditLog);
+    const newArc=[snap,...archives];
+    setArchives(newArc);
+    persistAll(entries,estimates,nextIdRef.current,recurringList,newArc,favorites,auditLog);
     showToast(`📁 ${snap.label} diarsipkan!`);
   };
+
+  // ── Form ──
   const validateForm=()=>{
     if(!form.date){showToast("⚠️ Tanggal wajib diisi!","error");return false;}
     if(form.date>todayStr()){showToast("⚠️ Tanggal tidak boleh melebihi hari ini!","error");return false;}
@@ -471,11 +482,73 @@ function App(){
     return true;
   };
 
-  // Favorit & AC
+  // ── CORE FIX: handleSave yang benar-benar aman ──
+  const handleSave=()=>{
+    if(!validateForm())return;
+    const entryData={...form,amount:toNum(form.amount),type:getType(form.category)};
+    const isEdit=editId!==null;
+    const eid=editId;
+
+    // 1. Reset UI state
+    setEditId(null);
+    setForm(EMPTY_FORM);
+    setShowForm(false);
+
+    if(isEdit){
+      // 2a. Buat array baru dari entries saat ini (bukan callback)
+      const newEntries=entries.map(e=>e.id===eid?{...entryData,id:eid}:e);
+      // 3a. Set state
+      setEntries(newEntries);
+      // 4a. Persist sekali dengan data eksplisit
+      persistAll(newEntries,estimates,nextIdRef.current,recurringList,archives,favorites,auditLog);
+      addAudit("EDIT",`Edit: ${entryData.desc} · ${fmt(entryData.amount)}`);
+      showToast(`✏️ Diperbarui: ${entryData.desc} · ${fmt(entryData.amount)}`);
+    } else {
+      // 2b. Ambil ID, increment ref
+      const nid=nextIdRef.current;
+      nextIdRef.current=nid+1;
+      // 3b. Buat array baru
+      const newEntries=[...entries,{...entryData,id:nid}];
+      // 4b. Set state
+      setEntries(newEntries);
+      // 5b. Persist sekali
+      persistAll(newEntries,estimates,nextIdRef.current,recurringList,archives,favorites,auditLog);
+      addAudit("ADD",`Tambah: ${entryData.desc} · ${fmt(entryData.amount)}`);
+      showToast(`✅ Ditambahkan: ${entryData.desc} · ${fmt(entryData.amount)}`);
+      if(entryData.type==="expense"){
+        const est=estimates[entryData.category]||0;
+        if(est>0&&(catTotals[entryData.category]||0)+entryData.amount>est)
+          setBudgetAlert({cat:entryData.category,est,total:(catTotals[entryData.category]||0)+entryData.amount});
+      }
+    }
+  };
+
+  const handleEdit=e=>{setForm({...e,amount:String(e.amount)});setEditId(e.id);setShowForm(true);window.scrollTo({top:0,behavior:"smooth"});};
+
+  const handleDelete=id=>{
+    const e=entries.find(x=>x.id===id);
+    showConfirm("Hapus entri ini?",()=>{
+      const newEntries=entries.filter(x=>x.id!==id);
+      setEntries(newEntries);
+      persistAll(newEntries,estimates,nextIdRef.current,recurringList,archives,favorites,auditLog);
+      addAudit("DELETE",`Hapus: ${e?.desc}`);
+    });
+  };
+
+  const clearAll=()=>showConfirm("Hapus SEMUA data?",()=>{
+    setEntries([]);
+    nextIdRef.current=1;
+    persistAll([],estimates,1,recurringList,archives,favorites,[]);
+  });
+
+  // ── Favorit & AC ──
   const saveFavorite=e=>{
     if(favorites.some(x=>x.desc===e.desc&&x.category===e.category)){showToast("⭐ Sudah ada","error");return;}
     const f={id:Date.now(),desc:e.desc,category:e.category,amount:e.amount,pic:e.pic,note:e.note||""};
-    const upd=[...favorites,f];setFavorites(upd);persist(entries,estimates,nextId,recurringList,archives,upd,auditLog);showToast(`⭐ ${f.desc}`);
+    const newFav=[...favorites,f];
+    setFavorites(newFav);
+    persistAll(entries,estimates,nextIdRef.current,recurringList,archives,newFav,auditLog);
+    showToast(`⭐ ${f.desc}`);
   };
   const applyFavorite=f=>setForm(x=>({...x,desc:f.desc,category:f.category,type:getType(f.category),amount:String(f.amount),pic:f.pic,note:f.note||""}));
   const historyMap=useMemo(()=>{const m={};[...entries].reverse().forEach(e=>{if(!m[e.desc])m[e.desc]={desc:e.desc,category:e.category,amount:e.amount,pic:e.pic,note:e.note||""};});return m;},[entries]);
@@ -497,65 +570,39 @@ function App(){
     const pic=cat==="Pindah Ke Suami"?"Suami":cat==="Pindah Ke Istri"?"Istri":form.pic;
     setForm(f=>({...f,category:cat,type:getType(cat),pic}));
   };
-  const handleSave=()=>{
-    if(!validateForm())return;
-    const entry={...form,amount:toNum(form.amount),type:getType(form.category)};
-    const isEdit=editId!==null;
-    const eid=editId;
-
-    // Reset UI
-    setEditId(null);
-    setForm(EMPTY_FORM);
-    setShowForm(false);
-
-    if(isEdit){
-      const updated=entries.map(e=>e.id===eid?{...entry,id:eid}:e);
-      setEntries(updated);
-      saveToStorage(updated);
-      addAudit("EDIT",`Edit: ${entry.desc} · ${fmt(entry.amount)}`);
-      showToast(`✏️ Diperbarui: ${entry.desc} · ${fmt(entry.amount)}`);
-    } else {
-      const nid=nextIdRef.current;
-      nextIdRef.current=nid+1;
-      setNextId(nid+1);
-      const updated=[...entries,{...entry,id:nid}];
-      setEntries(updated);
-      saveToStorage(updated,nid+1);
-      addAudit("ADD",`Tambah: ${entry.desc} · ${fmt(entry.amount)}`);
-      showToast(`✅ Ditambahkan: ${entry.desc} · ${fmt(entry.amount)}`);
-      if(entry.type==="expense"){
-        const est=estimates[entry.category]||0;
-        if(est>0){
-          const cur=(catTotals[entry.category]||0)+entry.amount;
-          if((cur/est)>1)setBudgetAlert({cat:entry.category,est,total:cur});
-        }
-      }
-    }
+  const updEstimates=newEst=>{
+    setEstimates(newEst);
+    persistAll(entries,newEst,nextIdRef.current,recurringList,archives,favorites,auditLog);
   };
-  const handleEdit=e=>{setForm({...e,amount:String(e.amount)});setEditId(e.id);setShowForm(true);window.scrollTo({top:0,behavior:"smooth"});};
-  const handleDelete=id=>{
-    const e=entries.find(x=>x.id===id);
-    showConfirm("Hapus entri ini?",()=>{
-      const newEntries=entries.filter(x=>x.id!==id);
-      setEntries(newEntries);
-      saveToStorage(newEntries);
-      addAudit("DELETE",`Hapus: ${e?.desc}`);
-    });
-  };
-  const clearAll=()=>showConfirm("Hapus SEMUA data?",()=>{
-    setEntries([]);
-    nextIdRef.current=1;
-    setNextId(1);
-    persist([],estimates,1,recurringList,archives,favorites,[]);
-  });
 
-  // Export/Import
+  // ── Export/Import ──
   const triggerDL=(content,name,mime)=>{try{const b=new Blob([content],{type:mime}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);document.body.removeChild(a);},200);}catch{window.open(`data:${mime};charset=utf-8,`+encodeURIComponent(content),"_blank");}};
   const exportCSV=()=>{if(!entries.length){showToast("⚠️ Belum ada data","error");return;}const h=["ID","Tanggal","Kategori","Deskripsi","Tipe","Nominal","PIC","Keterangan"];triggerDL("\uFEFF"+[h,...periodEntries.map(e=>[e.id,e.date,e.category,e.desc,e.type,e.amount,e.pic,e.note||""])].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n"),`keuangan-${dateFrom}-${dateTo}.csv`,"text/csv");};
-  const exportJSON=()=>{if(!entries.length){showToast("⚠️ Belum ada data","error");return;}triggerDL(JSON.stringify({entries,estimates,nextId,recurringList,archives,favorites},null,2),"keuangan-backup.json","application/json");};
-  const importJSON=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.entries){setEntries(d.entries);setEstimates(d.estimates||DEFAULT_EST);setNextId(d.nextId||d.entries.length+1);if(d.recurringList)setRecurringList(d.recurringList);if(d.archives)setArchives(d.archives);if(d.favorites)setFavorites(d.favorites);persist(d.entries,d.estimates||DEFAULT_EST,d.nextId||d.entries.length+1,d.recurringList||DEFAULT_REC,d.archives||[],d.favorites||[],[]);showToast("✅ Data dimuat!");}else showToast("⚠️ Format tidak valid","error");}catch{showToast("⚠️ Gagal membaca file","error");}};r.readAsText(f);ev.target.value="";};
+  const exportJSON=()=>{if(!entries.length){showToast("⚠️ Belum ada data","error");return;}triggerDL(JSON.stringify({entries,estimates,nextId:nextIdRef.current,recurringList,archives,favorites},null,2),"keuangan-backup.json","application/json");};
+  const importJSON=ev=>{
+    const f=ev.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const d=JSON.parse(e.target.result);
+        if(d.entries){
+          const nid=d.nextId||d.entries.length+1;
+          setEntries(d.entries);
+          const newEst=d.estimates||DEFAULT_EST;
+          setEstimates(newEst);
+          nextIdRef.current=nid;
+          if(d.recurringList)setRecurringList(d.recurringList);
+          if(d.archives)setArchives(d.archives);
+          if(d.favorites)setFavorites(d.favorites);
+          persistAll(d.entries,newEst,nid,d.recurringList||DEFAULT_REC,d.archives||[],d.favorites||[],[]);
+          showToast("✅ Data dimuat!");
+        }else showToast("⚠️ Format tidak valid","error");
+      }catch{showToast("⚠️ Gagal membaca file","error");}
+    };
+    r.readAsText(f);ev.target.value="";
+  };
 
-  // Print per tab
+  // ── Print ──
   const handlePrint=()=>{
     const pl=useDateFilter?`${fmtDate(dateFrom)} s/d ${fmtDate(dateTo)}`:"Semua Data";
     const tabLabel={main:"📋 Semua Transaksi",suami:"👨 Kas Suami",istri:"👩 Kas Istri",summary:"📊 Ringkasan",rutin:"🔄 Rutin",arsip:"📁 Arsip",audit:"📜 Log"}[activeTab];
@@ -563,23 +610,24 @@ function App(){
     let body="";
     if(activeTab==="main"){
       body=`<h2>📋 Semua Transaksi (${filtered.length})</h2><table><thead><tr><th>#</th><th>Tgl</th><th>Tipe</th><th>Kategori</th><th>Deskripsi</th><th class="tr">Debit</th><th class="tr">Transfer</th><th class="tr">Kredit</th><th class="tr">Saldo Kas</th><th>PIC</th><th>Ket</th></tr></thead><tbody>${filtered.map((e,i)=>{const isT=e.type==="transfer",isI=e.type==="income";const s=mainLedger.find(x=>x.id===e.id);return`<tr><td>${i+1}</td><td>${fmtDate(e.date)}</td><td>${isT?"↔":isI?"⬆":"⬇"}</td><td>${e.category}</td><td>${e.desc}</td><td class="tr r">${!isI&&!isT?fmt(e.amount):""}</td><td class="tr">${isT?fmt(e.amount):""}</td><td class="tr g">${isI?fmt(e.amount):""}</td><td class="tr">${s?fmt(s.running):""}</td><td>${e.pic}</td><td>${e.note||""}</td></tr>`;}).join("")}</tbody><tfoot><tr><td colspan="5">TOTAL</td><td class="tr">${fmt(totalExpense)}</td><td class="tr">${fmt(totalTransfer)}</td><td class="tr">${fmt(totalIncome)}</td><td class="tr">${fmt(balance)}</td><td colspan="2"></td></tr></tfoot></table>`;
-    } else if(activeTab==="suami"){
-      body=`<h2>👨 Kas Suami</h2><table><thead><tr><th>#</th><th>Tgl</th><th>Kategori</th><th>Deskripsi</th><th class="tr">Keluar</th><th class="tr">Masuk</th><th class="tr">Saldo</th><th>Ket</th></tr></thead><tbody>${suamiL.map((e,i)=>{const isIn=e.category==="Pindah Ke Suami";return`<tr><td>${i+1}</td><td>${fmtDate(e.date)}</td><td>${e.category}</td><td>${e.desc}</td><td class="tr r">${!isIn?fmt(e.amount):""}</td><td class="tr g">${isIn?fmt(e.amount):""}</td><td class="tr ${e.running>=0?"g":"r"}">${fmt(e.running)}</td><td>${e.note||""}</td></tr>`;}).join("")}</tbody><tfoot><tr><td colspan="4">TOTAL</td><td class="tr">${fmt(suamiE.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0))}</td><td class="tr">${fmt(totalTrfS)}</td><td class="tr">${fmt(suamiSaldo)}</td><td></td></tr></tfoot></table>`;
-    } else if(activeTab==="istri"){
-      body=`<h2>👩 Kas Istri</h2><table><thead><tr><th>#</th><th>Tgl</th><th>Kategori</th><th>Deskripsi</th><th class="tr">Keluar</th><th class="tr">Masuk</th><th class="tr">Saldo</th><th>Ket</th></tr></thead><tbody>${istriL.map((e,i)=>{const isIn=e.category==="Pindah Ke Istri";return`<tr><td>${i+1}</td><td>${fmtDate(e.date)}</td><td>${e.category}</td><td>${e.desc}</td><td class="tr r">${!isIn?fmt(e.amount):""}</td><td class="tr g">${isIn?fmt(e.amount):""}</td><td class="tr ${e.running>=0?"g":"r"}">${fmt(e.running)}</td><td>${e.note||""}</td></tr>`;}).join("")}</tbody><tfoot><tr><td colspan="4">TOTAL</td><td class="tr">${fmt(istriE.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0))}</td><td class="tr">${fmt(totalTrfI)}</td><td class="tr">${fmt(istriSaldo)}</td><td></td></tr></tfoot></table>`;
-    } else if(activeTab==="summary"){
-      body=`<h2>📊 Ringkasan</h2><table><tbody><tr><td>Total Pendapatan</td><td class="tr g">${fmt(totalIncome)}</td></tr><tr><td>Total Pengeluaran</td><td class="tr r">${fmt(totalExpense)}</td></tr><tr><td>Total Transfer</td><td class="tr">${fmt(totalTransfer)}</td></tr><tr><td><b>Saldo Kas Utama</b></td><td class="tr"><b>${fmt(balance)}</b></td></tr><tr><td>Saldo Kas Suami</td><td class="tr">${fmt(suamiSaldo)}</td></tr><tr><td>Saldo Kas Istri</td><td class="tr">${fmt(istriSaldo)}</td></tr><tr><td><b>Total Aset</b></td><td class="tr"><b>${fmt(balance+suamiSaldo+istriSaldo)}</b></td></tr></tbody></table><h2>📋 Estimasi vs Realisasi</h2><table><thead><tr><th>Kategori</th><th class="tr">Estimasi</th><th class="tr">Realisasi</th><th class="tr">%</th><th class="tr">Selisih</th></tr></thead><tbody>${EXPENSE_CATS.map(cat=>{const est=estimates[cat]||0,real=catTotals[cat]||0,pct=est>0?(real/est*100):0;return`<tr><td>${cat}</td><td class="tr">${fmt(est)}</td><td class="tr">${fmt(real)}</td><td class="tr">${pct.toFixed(1)}%</td><td class="tr ${est-real<0?"r":"g"}">${fmt(est-real)}</td></tr>`;}).join("")}</tbody><tfoot><tr><td>TOTAL</td><td class="tr">${fmt(totalEst)}</td><td class="tr">${fmt(totalReal)}</td><td class="tr">${totalEst>0?(totalReal/totalEst*100).toFixed(1)+"%":"–"}</td><td class="tr">${fmt(totalEst-totalReal)}</td></tr></tfoot></table>`;
-    } else if(activeTab==="rutin"){
+    }else if(activeTab==="suami"){
+      body=`<h2>👨 Kas Suami</h2><table><thead><tr><th>#</th><th>Tgl</th><th>Kategori</th><th>Deskripsi</th><th class="tr">Keluar</th><th class="tr">Masuk</th><th class="tr">Saldo</th></tr></thead><tbody>${suamiL.map((e,i)=>{const isIn=e.category==="Pindah Ke Suami";return`<tr><td>${i+1}</td><td>${fmtDate(e.date)}</td><td>${e.category}</td><td>${e.desc}</td><td class="tr r">${!isIn?fmt(e.amount):""}</td><td class="tr g">${isIn?fmt(e.amount):""}</td><td class="tr ${e.running>=0?"g":"r"}">${fmt(e.running)}</td></tr>`;}).join("")}</tbody></table>`;
+    }else if(activeTab==="istri"){
+      body=`<h2>👩 Kas Istri</h2><table><thead><tr><th>#</th><th>Tgl</th><th>Kategori</th><th>Deskripsi</th><th class="tr">Keluar</th><th class="tr">Masuk</th><th class="tr">Saldo</th></tr></thead><tbody>${istriL.map((e,i)=>{const isIn=e.category==="Pindah Ke Istri";return`<tr><td>${i+1}</td><td>${fmtDate(e.date)}</td><td>${e.category}</td><td>${e.desc}</td><td class="tr r">${!isIn?fmt(e.amount):""}</td><td class="tr g">${isIn?fmt(e.amount):""}</td><td class="tr ${e.running>=0?"g":"r"}">${fmt(e.running)}</td></tr>`;}).join("")}</tbody></table>`;
+    }else if(activeTab==="summary"){
+      body=`<h2>📊 Ringkasan</h2><table><tbody><tr><td>Total Pendapatan</td><td class="tr g">${fmt(totalIncome)}</td></tr><tr><td>Total Pengeluaran</td><td class="tr r">${fmt(totalExpense)}</td></tr><tr><td>Total Transfer</td><td class="tr">${fmt(totalTransfer)}</td></tr><tr><td><b>Saldo Kas Utama</b></td><td class="tr"><b>${fmt(balance)}</b></td></tr><tr><td>Saldo Kas Suami</td><td class="tr">${fmt(suamiSaldo)}</td></tr><tr><td>Saldo Kas Istri</td><td class="tr">${fmt(istriSaldo)}</td></tr><tr><td><b>Total Aset</b></td><td class="tr"><b>${fmt(balance+suamiSaldo+istriSaldo)}</b></td></tr></tbody></table>`;
+    }else if(activeTab==="rutin"){
       body=`<h2>🔄 Rutin</h2><table><thead><tr><th>Nama</th><th>Kategori</th><th class="tr">Nominal</th><th>Tgl</th><th>PIC</th><th>Status</th></tr></thead><tbody>${recurringList.map(r=>`<tr><td>${r.desc}</td><td>${r.category}</td><td class="tr">${fmt(r.amount)}</td><td>Tgl ${r.dayOfMonth}</td><td>${r.pic}</td><td>${r.active?"Aktif":"Off"}</td></tr>`).join("")}</tbody></table>`;
-    } else if(activeTab==="audit"){
-      body=`<h2>📜 Audit Log</h2><table><thead><tr><th>Waktu</th><th>Aksi</th><th>Detail</th></tr></thead><tbody>${auditLog.map(l=>`<tr><td>${l.time}</td><td>${l.action}</td><td>${l.desc}</td></tr>`).join("")}</tbody></table>`;
+    }else if(activeTab==="audit"){
+      body=`<h2>📜 Log</h2><table><thead><tr><th>Waktu</th><th>Aksi</th><th>Detail</th></tr></thead><tbody>${auditLog.map(l=>`<tr><td>${l.time}</td><td>${l.action}</td><td>${l.desc}</td></tr>`).join("")}</tbody></table>`;
     }
-    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Keuangan Keluarga</title><style>${css}</style></head><body><h1>💰 Keuangan Keluarga — ${tabLabel}</h1><p>Periode: ${pl} | Dicetak: ${new Date().toLocaleString("id-ID")}</p>${body}<div class="footer">Aplikasi Keuangan Keluarga</div></body></html>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Keuangan Keluarga</title><style>${css}</style></head><body><h1>💰 Laporan Keuangan Keluarga — ${tabLabel}</h1><p>Periode: ${pl} | Dicetak: ${new Date().toLocaleString("id-ID")}</p>${body}<div class="footer">Aplikasi Keuangan Keluarga</div></body></html>`;
     let f=document.getElementById("__pf");
     if(!f){f=document.createElement("iframe");f.id="__pf";f.style.cssText="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;";document.body.appendChild(f);}
     f.srcdoc=html;f.onload=()=>{try{f.contentWindow.focus();f.contentWindow.print();}catch{alert("Print tidak tersedia.");}};
   };
 
+  // ── Render helpers ──
   const tdC="border border-gray-200 px-2 py-1 text-xs";
   const thC="border border-gray-300 px-2 py-1.5 text-xs font-semibold text-white text-left";
   const TABS=[{id:"main",l:"📋 Utama"},{id:"suami",l:"👨 Suami"},{id:"istri",l:"👩 Istri"},{id:"summary",l:"📊 Ringkasan"},{id:"rutin",l:"🔄 Rutin"},{id:"arsip",l:"📁 Arsip"},{id:"audit",l:"📜 Log"}];
@@ -591,22 +639,14 @@ function App(){
   return(
     <div className="min-h-screen bg-gray-50">
 
-      {/* Toast */}
       {toast&&<div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium max-w-xs no-print ${toast.type==="success"?"bg-green-600 text-white":"bg-red-500 text-white"}`} style={{animation:"slideIn .25s ease"}}><span className="flex-1">{toast.msg}</span><button onClick={()=>setToast(null)}>✕</button></div>}
-
-      {/* Confirm */}
       {confirmDialog&&<div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print" style={{background:"rgba(0,0,0,0.5)"}}><div className="bg-white rounded-2xl shadow-2xl max-w-xs w-full p-6 text-center"><div className="text-4xl mb-3">🗑️</div><p className="text-gray-700 text-sm mb-5">{confirmDialog.msg}</p><div className="flex gap-3"><button onClick={()=>setConfirmDialog(null)} className="flex-1 bg-gray-100 text-gray-700 font-semibold py-2.5 rounded-xl text-sm">Batal</button><button onClick={()=>{confirmDialog.onOk();setConfirmDialog(null);}} className="flex-1 bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm">Hapus</button></div></div></div>}
-
-      {/* Budget Alert */}
       {budgetAlert&&<div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print" style={{background:"rgba(0,0,0,0.5)"}}><div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"><div className="bg-red-500 px-6 py-4 text-center"><div className="text-4xl mb-1">⚠️</div><h2 className="text-white font-bold">Anggaran Terlewati!</h2></div><div className="px-6 py-5 text-center"><p className="text-gray-700 text-sm mb-3">Pos <span className="font-bold text-red-600">"{budgetAlert.cat}"</span> melebihi estimasi.</p><div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-xs space-y-1"><div className="flex justify-between"><span>Estimasi</span><span>{fmt(budgetAlert.est)}</span></div><div className="flex justify-between font-bold text-red-600"><span>Realisasi</span><span>{fmt(budgetAlert.total)}</span></div></div><button onClick={()=>setBudgetAlert(null)} className="w-full bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm">Mengerti</button></div></div></div>}
-
-      {/* Recurring Popup */}
       {showReminderPopup&&recurringReminder.length>0&&<div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print" style={{background:"rgba(0,0,0,0.5)"}}><div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"><div className="bg-indigo-600 px-6 py-4"><div className="text-2xl mb-1">🔄</div><h2 className="text-white font-bold">Transaksi Rutin Belum Dicatat</h2><p className="text-indigo-200 text-xs mt-1">{recurringReminder.length} transaksi</p></div><div className="px-6 py-4 space-y-2 max-h-72 overflow-y-auto">{recurringReminder.map(r=><div key={r.id} className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3"><div><div className="text-sm font-semibold">{r.desc}</div><div className="text-xs text-gray-500">{r.category} · tgl {r.dayOfMonth}</div><div className="text-sm font-bold text-indigo-700">{fmt(r.amount)}</div></div><div className="flex gap-2"><button onClick={()=>recordRecurring(r)} className="bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Catat</button><button onClick={()=>{setRecurringReminder(p=>p.filter(x=>x.id!==r.id));if(recurringReminder.length<=1)setShowReminderPopup(false);}} className="bg-gray-100 text-gray-500 text-xs px-3 py-1.5 rounded-lg">Skip</button></div></div>)}</div><div className="px-6 py-3 border-t flex justify-end"><button onClick={()=>setShowReminderPopup(false)} className="bg-gray-200 text-gray-700 text-xs font-semibold px-4 py-2 rounded-xl">Tutup</button></div></div></div>}
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div className="bg-white border-b shadow-sm sticky top-0 z-10 no-print">
         <div className="max-w-screen-2xl mx-auto px-4 py-2">
-          {/* Row 1 */}
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <span className="text-base font-bold text-gray-800">💰 Keuangan Keluarga</span>
@@ -620,7 +660,6 @@ function App(){
               {entries.length>0&&<button onClick={clearAll} className="bg-red-400 text-white px-3 py-1.5 rounded text-xs hover:bg-red-500">🗑</button>}
             </div>
           </div>
-          {/* Row 2: Tabs + action buttons */}
           <div className="flex items-center justify-between flex-wrap gap-2 mt-1.5">
             <div className="tab-scroll flex gap-1">
               {TABS.map(t=><button key={t.id} onClick={()=>setActiveTab(t.id)} className={`px-3 py-1 rounded text-xs font-medium whitespace-nowrap flex-shrink-0 ${activeTab===t.id?"bg-green-600 text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{t.l}</button>)}
@@ -633,7 +672,6 @@ function App(){
               <label className="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-teal-700 cursor-pointer">📂 Load<input type="file" accept=".json" className="hidden" onChange={importJSON}/></label>
             </div>
           </div>
-          {/* Row 3: Period filter */}
           <div className="flex flex-wrap items-center gap-3 mt-1.5">
             <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"><input type="checkbox" checked={useDateFilter} onChange={e=>setUseDateFilter(e.target.checked)} className="accent-green-600"/><span className="font-medium">Filter Periode:</span></label>
             <div className={`flex items-center gap-2 ${useDateFilter?"opacity-100":"opacity-40 pointer-events-none"}`}>
@@ -644,7 +682,6 @@ function App(){
             </div>
             {useDateFilter&&<span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium">📅 {periodEntries.length} transaksi</span>}
           </div>
-          {/* Row 4: Summary badges */}
           <div className="flex gap-2 flex-wrap mt-1.5 pb-1">
             {[{l:"Masuk",v:totalIncome,c:"bg-green-50 border-green-200",tc:"text-green-700",vc:"text-green-800"},{l:"Keluar",v:totalExpense,c:"bg-red-50 border-red-200",tc:"text-red-700",vc:"text-red-800"},{l:"Transfer",v:totalTransfer,c:"bg-purple-50 border-purple-200",tc:"text-purple-700",vc:"text-purple-800"}].map(({l,v,c,tc,vc})=>(
               <div key={l} className={`flex items-center gap-1.5 border rounded px-2 py-1 ${c}`}><span className={`text-xs font-medium ${tc}`}>{l}:</span><span className={`text-xs font-bold ${vc}`}>{fmt(v)}</span></div>
@@ -656,16 +693,16 @@ function App(){
         </div>
       </div>
 
-      {/* Form */}
+      {/* FORM */}
       {showForm&&<div className="max-w-screen-2xl mx-auto px-4 py-3 no-print">
         <div className="bg-white rounded-lg border shadow-sm p-4">
           <div className="text-sm font-semibold text-gray-700 mb-3">{editId?"✏️ Edit Entri":"➕ Tambah Entri Baru"}</div>
-          {favorites.length>0&&<div className="mb-3 overflow-x-auto"><div className="text-xs text-gray-500 mb-1">⭐ Favorit:</div><div className="flex gap-1.5 flex-nowrap">{favorites.map(f=><div key={f.id} className="flex items-center gap-1 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 flex-shrink-0 group"><button onClick={()=>applyFavorite(f)} className="text-xs text-yellow-800 font-medium whitespace-nowrap">{f.desc} <span className="text-yellow-500">· {fmt(f.amount)}</span></button><button onClick={()=>{const u=favorites.filter(x=>x.id!==f.id);setFavorites(u);persist(entries,estimates,nextId,recurringList,archives,u,auditLog);}} className="text-yellow-300 hover:text-red-400 text-xs ml-1">✕</button></div>)}</div></div>}
+          {favorites.length>0&&<div className="mb-3 overflow-x-auto"><div className="text-xs text-gray-500 mb-1">⭐ Favorit:</div><div className="flex gap-1.5 flex-nowrap">{favorites.map(f=><div key={f.id} className="flex items-center gap-1 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 flex-shrink-0 group"><button onClick={()=>applyFavorite(f)} className="text-xs text-yellow-800 font-medium whitespace-nowrap">{f.desc} <span className="text-yellow-500">· {fmt(f.amount)}</span></button><button onClick={()=>{const nf=favorites.filter(x=>x.id!==f.id);setFavorites(nf);persistAll(entries,estimates,nextIdRef.current,recurringList,archives,nf,auditLog);}} className="text-yellow-300 hover:text-red-400 text-xs ml-1">✕</button></div>)}</div></div>}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div><label className="block text-xs text-gray-500 mb-1">Tanggal*</label><input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"/></div>
             <div><label className="block text-xs text-gray-500 mb-1">Kategori</label><select value={form.category} onChange={e=>handleCatChange(e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"><optgroup label="── Pendapatan">{INCOME_CATS.map(c=><option key={c}>{c}</option>)}</optgroup><optgroup label="── Pengeluaran">{EXPENSE_CATS.map(c=><option key={c}>{c}</option>)}</optgroup><optgroup label="── Transfer"><option>Pindah Ke Suami</option><option>Pindah Ke Istri</option></optgroup></select></div>
             <div className="col-span-2 relative"><label className="block text-xs text-gray-500 mb-1">Deskripsi*</label>
-              <input ref={descRef} type="text" value={form.desc} onChange={e=>handleDescChange(e.target.value)} onKeyDown={handleDescKeyDown} onBlur={()=>setTimeout(()=>setShowAC(false),150)} placeholder="Keterangan..." className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"/>
+              <input type="text" value={form.desc} onChange={e=>handleDescChange(e.target.value)} onKeyDown={handleDescKeyDown} onBlur={()=>setTimeout(()=>setShowAC(false),150)} placeholder="Keterangan..." className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500"/>
               {showAC&&<div className="absolute z-30 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 overflow-hidden">{acSuggestions.map((s,i)=><button key={s.desc} onMouseDown={()=>applyAC(s)} className={`w-full text-left px-3 py-2 text-xs flex justify-between gap-2 hover:bg-green-50 ${i===acIndex?"bg-green-50":""}`}><span className="font-medium truncate">{s.desc}</span><span className="text-gray-400 shrink-0">{fmt(s.amount)}</span></button>)}</div>}
             </div>
             <div><label className="block text-xs text-gray-500 mb-1">Tipe</label><div className={`border rounded px-2 py-1.5 text-xs font-medium ${form.type==="income"?"bg-green-50 text-green-700 border-green-300":form.type==="transfer"?"bg-purple-50 text-purple-700 border-purple-300":"bg-red-50 text-red-700 border-red-300"}`}>{form.type==="income"?"⬆ Pemasukan":form.type==="transfer"?"↔ Transfer":"⬇ Pengeluaran"}</div></div>
@@ -685,7 +722,7 @@ function App(){
 
       <div className="max-w-screen-2xl mx-auto px-4 pb-4">
 
-        {/* ── TAB UTAMA ── */}
+        {/* TAB UTAMA */}
         {activeTab==="main"&&<div>
           <div className="flex gap-3 my-3 flex-wrap items-center">
             <span className="text-xs text-gray-500 font-medium">Filter:</span>
@@ -698,8 +735,8 @@ function App(){
             {filtered.length===0?<div className="bg-white rounded-lg border p-10 text-center text-gray-400"><div className="text-3xl mb-2">📭</div><div className="text-sm">Belum ada transaksi.</div><button onClick={()=>{setForm(EMPTY_FORM);setEditId(null);setShowForm(true);}} className="mt-3 bg-green-600 text-white px-4 py-1.5 rounded text-xs">+ Tambah</button></div>
             :filtered.map(e=>{
               const isT=e.type==="transfer",isI=e.type==="income";
-              const saldoE=mainLedger.find(x=>x.id===e.id);
-              return<div key={e.id} className={`bg-white rounded-lg border p-3 ${e.category==="Pindah Ke Suami"?"border-l-4 border-l-blue-400":e.category==="Pindah Ke Istri"?"border-l-4 border-l-pink-400":isI?"border-l-4 border-l-green-500":isT?"border-l-4 border-l-purple-400":"border-l-4 border-l-red-400"}`}>
+              const sE=mainLedger.find(x=>x.id===e.id);
+              return<div key={e.id} className={`bg-white rounded-lg border p-3 ${isI?"border-l-4 border-l-green-500":isT?"border-l-4 border-l-purple-400":"border-l-4 border-l-red-400"}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -712,7 +749,7 @@ function App(){
                       <span className="text-xs text-gray-400">{fmtDate(e.date)}</span>
                     </div>
                     {e.note&&<div className="text-xs text-gray-400 mt-0.5">{e.note}</div>}
-                    {saldoE&&<div className={`text-xs mt-1 font-medium ${saldoE.running>=0?"text-blue-600":"text-red-600"}`}>Saldo kas: {fmt(saldoE.running)}</div>}
+                    {sE&&<div className={`text-xs mt-1 font-medium ${sE.running>=0?"text-blue-600":"text-red-600"}`}>Saldo kas: {fmt(sE.running)}</div>}
                   </div>
                   <div className="text-right flex-shrink-0">
                     <div className={`text-sm font-bold ${isI?"text-green-700":isT?"text-purple-600":"text-red-600"}`}>{fmt(e.amount)}</div>
@@ -736,30 +773,31 @@ function App(){
                   <th className={`${thC} text-right`} style={{width:120}}>Saldo Kas</th><th className={thC} style={{width:70}}>PIC</th><th className={thC} style={{width:110}}>Keterangan</th><th className={thC} style={{width:65}}>Aksi</th>
                 </tr></thead>
                 <tbody>
-                  {filtered.length===0?<tr><td colSpan={12}><div className="flex flex-col items-center py-14 text-gray-400"><div className="text-4xl mb-2">📭</div><div className="text-sm">Belum ada transaksi.</div><button onClick={()=>{setForm(EMPTY_FORM);setEditId(null);setShowForm(true);}} className="mt-3 bg-green-600 text-white px-4 py-1.5 rounded text-xs">+ Tambah</button></div></td></tr>
-                  :filtered.map((e,i)=>{
-                    const isT=e.type==="transfer",isI=e.type==="income";
-                    const saldoE=mainLedger.find(x=>x.id===e.id);
-                    const bg=e.category==="Pindah Ke Suami"?"bg-blue-50":e.category==="Pindah Ke Istri"?"bg-pink-50":i%2===0?"bg-white":"bg-gray-50";
-                    return<tr key={e.id} className={`${bg} hover:bg-yellow-50`}>
-                      <td className={`${tdC} text-gray-400 text-center`}>{i+1}</td>
-                      <td className={`${tdC} text-gray-600 whitespace-nowrap`}>{fmtDate(e.date)}</td>
-                      <td className={tdC}><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${isT?"bg-purple-100 text-purple-700":isI?"bg-green-600 text-white":"bg-red-100 text-red-700"}`}>{isT?"↔ Transfer":isI?"⬆ Masuk":"⬇ Keluar"}</span></td>
-                      <td className={tdC}><span className={`px-1.5 py-0.5 rounded text-xs ${isT&&e.category.includes("Suami")?"bg-blue-100 text-blue-700":isT?"bg-pink-100 text-pink-700":isI?"bg-green-100 text-green-700":"bg-orange-100 text-orange-700"}`}>{e.category}</span></td>
-                      <td className={`${tdC} font-medium text-gray-800`}>{e.desc}</td>
-                      <td className={`${tdC} text-right text-red-600 font-medium`}>{!isI&&!isT?fmt(e.amount):""}</td>
-                      <td className={`${tdC} text-right text-purple-600 font-medium`}>{isT?fmt(e.amount):""}</td>
-                      <td className={`${tdC} text-right text-green-700 font-medium`}>{isI?fmt(e.amount):""}</td>
-                      <td className={`${tdC} text-right font-semibold text-xs`}>{saldoE?<span className={saldoE.running>=0?"text-blue-700":"text-red-700"}>{fmt(saldoE.running)}</span>:<span className="text-gray-300">—</span>}</td>
-                      <td className={tdC}><span className={`px-1.5 py-0.5 rounded text-xs ${e.pic==="Suami"?"bg-blue-100 text-blue-700":e.pic==="Istri"?"bg-pink-100 text-pink-700":"bg-gray-100 text-gray-600"}`}>{e.pic}</span></td>
-                      <td className={`${tdC} text-gray-400 text-xs`}>{e.note}</td>
-                      <td className={`${tdC} text-center`}><div className="flex gap-1 justify-center">
-                        <button onClick={()=>saveFavorite(e)} className="text-yellow-400 hover:text-yellow-500 text-xs">⭐</button>
-                        <button onClick={()=>handleEdit(e)} className="text-blue-500 hover:text-blue-700 text-xs">✏️</button>
-                        <button onClick={()=>handleDelete(e.id)} className="text-red-400 hover:text-red-600 text-xs">🗑</button>
-                      </div></td>
-                    </tr>;
-                  })}
+                  {filtered.length===0
+                    ?<tr><td colSpan={12}><div className="flex flex-col items-center py-14 text-gray-400"><div className="text-4xl mb-2">📭</div><div className="text-sm">Belum ada transaksi.</div><button onClick={()=>{setForm(EMPTY_FORM);setEditId(null);setShowForm(true);}} className="mt-3 bg-green-600 text-white px-4 py-1.5 rounded text-xs">+ Tambah</button></div></td></tr>
+                    :filtered.map((e,i)=>{
+                      const isT=e.type==="transfer",isI=e.type==="income";
+                      const sE=mainLedger.find(x=>x.id===e.id);
+                      const bg=e.category==="Pindah Ke Suami"?"bg-blue-50":e.category==="Pindah Ke Istri"?"bg-pink-50":i%2===0?"bg-white":"bg-gray-50";
+                      return<tr key={e.id} className={`${bg} hover:bg-yellow-50`}>
+                        <td className={`${tdC} text-gray-400 text-center`}>{i+1}</td>
+                        <td className={`${tdC} text-gray-600 whitespace-nowrap`}>{fmtDate(e.date)}</td>
+                        <td className={tdC}><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${isT?"bg-purple-100 text-purple-700":isI?"bg-green-600 text-white":"bg-red-100 text-red-700"}`}>{isT?"↔ Transfer":isI?"⬆ Masuk":"⬇ Keluar"}</span></td>
+                        <td className={tdC}><span className={`px-1.5 py-0.5 rounded text-xs ${isT&&e.category.includes("Suami")?"bg-blue-100 text-blue-700":isT?"bg-pink-100 text-pink-700":isI?"bg-green-100 text-green-700":"bg-orange-100 text-orange-700"}`}>{e.category}</span></td>
+                        <td className={`${tdC} font-medium text-gray-800`}>{e.desc}</td>
+                        <td className={`${tdC} text-right text-red-600 font-medium`}>{!isI&&!isT?fmt(e.amount):""}</td>
+                        <td className={`${tdC} text-right text-purple-600 font-medium`}>{isT?fmt(e.amount):""}</td>
+                        <td className={`${tdC} text-right text-green-700 font-medium`}>{isI?fmt(e.amount):""}</td>
+                        <td className={`${tdC} text-right font-semibold text-xs`}>{sE?<span className={sE.running>=0?"text-blue-700":"text-red-700"}>{fmt(sE.running)}</span>:<span className="text-gray-300">—</span>}</td>
+                        <td className={tdC}><span className={`px-1.5 py-0.5 rounded text-xs ${e.pic==="Suami"?"bg-blue-100 text-blue-700":e.pic==="Istri"?"bg-pink-100 text-pink-700":"bg-gray-100 text-gray-600"}`}>{e.pic}</span></td>
+                        <td className={`${tdC} text-gray-400 text-xs`}>{e.note}</td>
+                        <td className={`${tdC} text-center`}><div className="flex gap-1 justify-center">
+                          <button onClick={()=>saveFavorite(e)} className="text-yellow-400 hover:text-yellow-500 text-xs">⭐</button>
+                          <button onClick={()=>handleEdit(e)} className="text-blue-500 hover:text-blue-700 text-xs">✏️</button>
+                          <button onClick={()=>handleDelete(e.id)} className="text-red-400 hover:text-red-600 text-xs">🗑</button>
+                        </div></td>
+                      </tr>;
+                    })}
                 </tbody>
                 {filtered.length>0&&<tfoot><tr style={{background:"#1a5c32"}}>
                   <td colSpan={5} className="border border-gray-300 px-2 py-1.5 text-xs font-bold text-white">TOTAL ({filtered.length} entri)</td>
@@ -774,7 +812,7 @@ function App(){
           </div>
         </div>}
 
-        {/* ── TAB SUAMI ── */}
+        {/* TAB SUAMI */}
         {activeTab==="suami"&&<div className="mt-3">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <span className="text-sm font-semibold text-blue-700">👨 Buku Kas Suami</span>
@@ -783,10 +821,8 @@ function App(){
               <div className={`border rounded px-3 py-1 ${suamiSaldo>=0?"bg-green-50 border-green-200":"bg-red-50 border-red-200"}`}><span className={`text-xs ${suamiSaldo>=0?"text-green-600":"text-red-600"}`}>Saldo: </span><span className={`text-xs font-bold ${suamiSaldo>=0?"text-green-800":"text-red-800"}`}>{fmt(suamiSaldo)}</span></div>
             </div>
           </div>
-          {/* Mobile */}
           <div className="sm:hidden space-y-2">{suamiL.length===0?<div className="bg-white rounded-lg border p-10 text-center text-gray-400 text-sm">Belum ada kas Suami.</div>:suamiL.map(e=>{const isIn=e.category==="Pindah Ke Suami";return<div key={e.id} className={`bg-white rounded-lg border p-3 ${isIn?"border-l-4 border-l-blue-400":"border-l-4 border-l-orange-400"}`}><div className="flex justify-between items-start"><div><div className="text-sm font-semibold">{e.desc}</div><div className="text-xs text-gray-500">{e.category} · {fmtDate(e.date)}</div></div><div className="text-right"><div className={`text-sm font-bold ${isIn?"text-blue-600":"text-red-600"}`}>{isIn?"+":"-"}{fmt(e.amount)}</div><div className={`text-xs font-medium ${e.running>=0?"text-green-700":"text-red-700"}`}>Saldo: {fmt(e.running)}</div></div></div></div>;})}
           </div>
-          {/* Desktop */}
           <div className="hidden sm:block bg-white rounded-lg border shadow-sm overflow-hidden"><div className="overflow-x-auto">
             <table className="w-full border-collapse" style={{minWidth:700}}>
               <thead><tr style={{background:"#c2763a"}}><th className={thC}>#</th><th className={thC}>Tanggal</th><th className={thC}>Kategori</th><th className={thC}>Deskripsi</th><th className={`${thC} text-right`}>Pengeluaran</th><th className={`${thC} text-right`}>Dana Masuk</th><th className={`${thC} text-right`}>Saldo</th><th className={thC}>Keterangan</th></tr></thead>
@@ -805,7 +841,7 @@ function App(){
           </div></div>
         </div>}
 
-        {/* ── TAB ISTRI ── */}
+        {/* TAB ISTRI */}
         {activeTab==="istri"&&<div className="mt-3">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <span className="text-sm font-semibold text-pink-700">👩 Buku Kas Istri</span>
@@ -814,10 +850,8 @@ function App(){
               <div className={`border rounded px-3 py-1 ${istriSaldo>=0?"bg-green-50 border-green-200":"bg-red-50 border-red-200"}`}><span className={`text-xs ${istriSaldo>=0?"text-green-600":"text-red-600"}`}>Saldo: </span><span className={`text-xs font-bold ${istriSaldo>=0?"text-green-800":"text-red-800"}`}>{fmt(istriSaldo)}</span></div>
             </div>
           </div>
-          {/* Mobile */}
           <div className="sm:hidden space-y-2">{istriL.length===0?<div className="bg-white rounded-lg border p-10 text-center text-gray-400 text-sm">Belum ada kas Istri.</div>:istriL.map(e=>{const isIn=e.category==="Pindah Ke Istri";return<div key={e.id} className={`bg-white rounded-lg border p-3 ${isIn?"border-l-4 border-l-pink-400":"border-l-4 border-l-orange-400"}`}><div className="flex justify-between items-start"><div><div className="text-sm font-semibold">{e.desc}</div><div className="text-xs text-gray-500">{e.category} · {fmtDate(e.date)}</div></div><div className="text-right"><div className={`text-sm font-bold ${isIn?"text-pink-600":"text-red-600"}`}>{isIn?"+":"-"}{fmt(e.amount)}</div><div className={`text-xs font-medium ${e.running>=0?"text-green-700":"text-red-700"}`}>Saldo: {fmt(e.running)}</div></div></div></div>;})}
           </div>
-          {/* Desktop */}
           <div className="hidden sm:block bg-white rounded-lg border shadow-sm overflow-hidden"><div className="overflow-x-auto">
             <table className="w-full border-collapse" style={{minWidth:700}}>
               <thead><tr style={{background:"#b85c88"}}><th className={thC}>#</th><th className={thC}>Tanggal</th><th className={thC}>Kategori</th><th className={thC}>Deskripsi</th><th className={`${thC} text-right`}>Pengeluaran</th><th className={`${thC} text-right`}>Dana Masuk</th><th className={`${thC} text-right`}>Saldo</th><th className={thC}>Keterangan</th></tr></thead>
@@ -836,14 +870,12 @@ function App(){
           </div></div>
         </div>}
 
-        {/* ── TAB RINGKASAN ── */}
+        {/* TAB RINGKASAN */}
         {activeTab==="summary"&&<div className="mt-3 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white rounded-lg border shadow-sm p-4">
               <div className="text-sm font-bold text-gray-700 mb-3">📈 Ringkasan Keuangan</div>
-              <div className="space-y-2">
-                {[{l:"Total Pendapatan",v:totalIncome,c:"text-green-700",b:"bg-green-50"},{l:"Total Pengeluaran",v:totalExpense,c:"text-red-700",b:"bg-red-50"},{l:"Total Transfer",v:totalTransfer,c:"text-purple-700",b:"bg-purple-50"},{l:"Saldo Kas Utama",v:balance,c:balance>=0?"text-blue-700":"text-orange-700",b:balance>=0?"bg-blue-50":"bg-orange-50"},null,{l:"Saldo Kas Suami",v:suamiSaldo,c:suamiSaldo>=0?"text-blue-700":"text-red-700",b:"bg-blue-50"},{l:"Saldo Kas Istri",v:istriSaldo,c:istriSaldo>=0?"text-pink-700":"text-red-700",b:"bg-pink-50"},{l:"Total Aset",v:balance+suamiSaldo+istriSaldo,c:"text-gray-800",b:"bg-gray-100"}].map((r,i)=>r===null?<div key={i} className="border-t border-gray-100"/>:<div key={r.l} className={`flex justify-between items-center ${r.b} rounded px-3 py-2`}><span className="text-xs text-gray-600">{r.l}</span><span className={`text-sm font-bold ${r.c}`}>{fmt(r.v)}</span></div>)}
-              </div>
+              <div className="space-y-2">{[{l:"Total Pendapatan",v:totalIncome,c:"text-green-700",b:"bg-green-50"},{l:"Total Pengeluaran",v:totalExpense,c:"text-red-700",b:"bg-red-50"},{l:"Total Transfer",v:totalTransfer,c:"text-purple-700",b:"bg-purple-50"},{l:"Saldo Kas Utama",v:balance,c:balance>=0?"text-blue-700":"text-orange-700",b:balance>=0?"bg-blue-50":"bg-orange-50"},null,{l:"Saldo Kas Suami",v:suamiSaldo,c:suamiSaldo>=0?"text-blue-700":"text-red-700",b:"bg-blue-50"},{l:"Saldo Kas Istri",v:istriSaldo,c:istriSaldo>=0?"text-pink-700":"text-red-700",b:"bg-pink-50"},{l:"Total Aset",v:balance+suamiSaldo+istriSaldo,c:"text-gray-800",b:"bg-gray-100"}].map((r,i)=>r===null?<div key={i} className="border-t border-gray-100"/>:<div key={r.l} className={`flex justify-between items-center ${r.b} rounded px-3 py-2`}><span className="text-xs text-gray-600">{r.l}</span><span className={`text-sm font-bold ${r.c}`}>{fmt(r.v)}</span></div>)}</div>
             </div>
             <div className="bg-white rounded-lg border shadow-sm p-4">
               <div className="text-sm font-bold text-gray-700 mb-3">💼 Rekap per Anggota</div>
@@ -862,35 +894,30 @@ function App(){
             </div>
           </div>
 
-          {/* Rasio */}
           {totalIncome>0&&(()=>{
-            const savingRate=Math.round(((totalIncome-totalExpense-totalTransfer)/totalIncome)*100);
+            const sr=Math.round(((totalIncome-totalExpense-totalTransfer)/totalIncome)*100);
             const dti=Math.round(((estimates["Cicilan Rumah"]||0)/totalIncome)*100);
             const needs=["Cicilan Rumah","Beban Bulanan","Belanja Rumah Tangga","Nafkah Istri","Orang Tua","Biaya Transportasi","Sedekah/Zakat","Kesehatan"];
             const wants=["Biaya Entertainment","Lainnya","Kebutuhan Pribadi Istri","Penunjang kerja suami"];
             const n50=Math.round(needs.reduce((s,c)=>(catTotals[c]||0)+s,0)/totalIncome*100);
             const w30=Math.round(wants.reduce((s,c)=>(catTotals[c]||0)+s,0)/totalIncome*100);
             const s20=Math.round(((catTotals["Tabungan"]||0)/totalIncome)*100);
-            const ratios=[{l:"Saving Rate",v:savingRate,ideal:"≥20%",ok:savingRate>=20,warn:savingRate>=10},{l:"Debt/Income",v:dti,ideal:"≤30%",ok:dti<=30,warn:dti<=40},{l:"Kebutuhan",v:n50,ideal:"≤50%",ok:n50<=50,warn:n50<=60},{l:"Keinginan",v:w30,ideal:"≤30%",ok:w30<=30,warn:w30<=40},{l:"Tabungan",v:s20,ideal:"≥20%",ok:s20>=20,warn:s20>=10}];
+            const ratios=[{l:"Saving Rate",v:sr,ideal:"≥20%",ok:sr>=20,warn:sr>=10},{l:"Debt/Income",v:dti,ideal:"≤30%",ok:dti<=30,warn:dti<=40},{l:"Kebutuhan",v:n50,ideal:"≤50%",ok:n50<=50,warn:n50<=60},{l:"Keinginan",v:w30,ideal:"≤30%",ok:w30<=30,warn:w30<=40},{l:"Tabungan",v:s20,ideal:"≥20%",ok:s20>=20,warn:s20>=10}];
             return<div className="bg-white rounded-lg border shadow-sm p-4">
               <div className="text-sm font-bold text-gray-700 mb-1">💪 Rasio Kesehatan Finansial (50/30/20)</div>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-2">
                 {ratios.map(r=>{const color=r.ok?"text-green-700":r.warn?"text-orange-700":"text-red-700";const bg=r.ok?"bg-green-50 border-green-200":r.warn?"bg-orange-50 border-orange-200":"bg-red-50 border-red-200";return<div key={r.l} className={`border rounded-lg p-2 text-center ${bg}`}><div className="text-xs text-gray-500 mb-1">{r.l}</div><div className={`text-lg font-bold ${color}`}>{r.v}%</div><div className="text-xs text-gray-400">{r.ideal}</div></div>;})}
               </div>
             </div>;
           })()}
 
-          {/* Prediksi */}
           {totalIncome>0&&(()=>{
             const today=new Date(),periodEnd=new Date(dateTo),periodStart=new Date(dateFrom);
             const daysLeft=Math.max(0,Math.ceil((periodEnd-today)/(1000*60*60*24)));
             const daysTotal=Math.max(1,Math.ceil((periodEnd-periodStart)/(1000*60*60*24))+1);
             const daysPassed=Math.max(1,daysTotal-daysLeft);
-            const avgDaily=totalExpense/daysPassed;
-            const projExp=Math.round(avgDaily*daysTotal);
-            const projBal=totalIncome-projExp-totalTransfer;
-            const burnRate=Math.round((totalExpense/totalIncome)*100);
-            const tl=trafficLight(burnRate);
+            const avgDaily=totalExpense/daysPassed,projExp=Math.round(avgDaily*daysTotal),projBal=totalIncome-projExp-totalTransfer;
+            const burnRate=Math.round((totalExpense/totalIncome)*100),tl=trafficLight(burnRate);
             return<div className="bg-white rounded-lg border shadow-sm p-4">
               <div className="text-sm font-bold text-gray-700 mb-3">🔮 Prediksi Cashflow sampai Gajian Berikutnya</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
@@ -903,27 +930,16 @@ function App(){
             </div>;
           })()}
 
-          {/* Grafik */}
           <div className="bg-white rounded-lg border shadow-sm p-4">
             <div className="text-sm font-bold text-gray-700 mb-4">📊 Grafik Pengeluaran vs Estimasi</div>
             {(()=>{
               const data=EXPENSE_CATS.filter(c=>(estimates[c]||0)>0||(catTotals[c]||0)>0).map(c=>({name:c.length>11?c.slice(0,11)+"…":c,full:c,Est:estimates[c]||0,Real:catTotals[c]||0,pct:(estimates[c]||0)>0?Math.round(((catTotals[c]||0)/(estimates[c]||1))*100):0}));
               if(!data.length)return<div className="text-center py-8 text-gray-400 text-xs">Belum ada data.</div>;
               const Tip=({active,payload})=>{if(!active||!payload?.length)return null;const d=payload[0]?.payload;const tl=trafficLight(d?.pct||0);return<div className="bg-white border rounded-lg shadow p-2 text-xs"><p className="font-bold mb-1">{d?.full}</p><p className="text-blue-600">Est: {fmt(d?.Est)}</p><p className="text-red-600">Real: {fmt(d?.Real)}</p><p className={`font-bold ${tl.text}`}>{d?.pct}% {tl.label}</p></div>;};
-              return<ResponsiveContainer width="100%" height={260}>
-                <BarChart data={data} margin={{top:5,right:10,left:10,bottom:55}}>
-                  <XAxis dataKey="name" tick={{fontSize:9}} angle={-35} textAnchor="end" interval={0}/>
-                  <YAxis tickFormatter={fmtK} tick={{fontSize:9}} width={42}/>
-                  <Tooltip content={<Tip/>}/>
-                  <Legend wrapperStyle={{fontSize:"11px",paddingTop:"4px"}}/>
-                  <Bar dataKey="Est" name="Estimasi" fill="#93c5fd" radius={[3,3,0,0]}/>
-                  <Bar dataKey="Real" name="Realisasi" fill="#f87171" radius={[3,3,0,0]}/>
-                </BarChart>
-              </ResponsiveContainer>;
+              return<ResponsiveContainer width="100%" height={260}><BarChart data={data} margin={{top:5,right:10,left:10,bottom:55}}><XAxis dataKey="name" tick={{fontSize:9}} angle={-35} textAnchor="end" interval={0}/><YAxis tickFormatter={fmtK} tick={{fontSize:9}} width={42}/><Tooltip content={<Tip/>}/><Legend wrapperStyle={{fontSize:"11px",paddingTop:"4px"}}/><Bar dataKey="Est" name="Estimasi" fill="#93c5fd" radius={[3,3,0,0]}/><Bar dataKey="Real" name="Realisasi" fill="#f87171" radius={[3,3,0,0]}/></BarChart></ResponsiveContainer>;
             })()}
           </div>
 
-          {/* Estimasi vs Realisasi */}
           <div className="bg-white rounded-lg border shadow-sm p-4">
             <div className="flex items-center justify-between mb-3"><div className="text-sm font-bold text-gray-700">📋 Estimasi vs Realisasi</div><div className="text-xs text-gray-400">💡 Klik estimasi untuk edit</div></div>
             <div className="overflow-x-auto"><table className="w-full border-collapse text-xs">
@@ -932,7 +948,9 @@ function App(){
                 const est=estimates[cat]||0,real=catTotals[cat]||0,pct=est>0?(real/est*100):real>0?100:0,sel=est-real,tl=trafficLight(pct);
                 return<tr key={cat} className={`${i%2===0?"bg-white":"bg-gray-50"} hover:bg-yellow-50`}>
                   <td className={`${tdC} font-medium`}><span className={`px-1.5 py-0.5 rounded text-xs ${tl.bg} ${tl.text} border ${tl.border}`}>{cat}</span></td>
-                  <td className={`${tdC} text-right`}>{editingEst===cat?<input type="number" autoFocus defaultValue={est} onBlur={e=>{updEstimates(p=>({...p,[cat]:toNum(e.target.value)}));setEditingEst(null);}} onKeyDown={e=>{if(e.key==="Enter"){updEstimates(p=>({...p,[cat]:toNum(e.target.value)}));setEditingEst(null);}}} className="w-28 border border-blue-400 rounded px-1 py-0.5 text-xs text-right"/>:<button onClick={()=>setEditingEst(cat)} className="text-gray-600 hover:text-blue-600 hover:underline font-medium">{fmt(est)}</button>}</td>
+                  <td className={`${tdC} text-right`}>{editingEst===cat
+                    ?<input type="number" autoFocus defaultValue={est} onBlur={e=>{const newEst={...estimates,[cat]:toNum(e.target.value)};updEstimates(newEst);setEditingEst(null);}} onKeyDown={e=>{if(e.key==="Enter"){const newEst={...estimates,[cat]:toNum(e.target.value)};updEstimates(newEst);setEditingEst(null);}}} className="w-28 border border-blue-400 rounded px-1 py-0.5 text-xs text-right"/>
+                    :<button onClick={()=>setEditingEst(cat)} className="text-gray-600 hover:text-blue-600 hover:underline font-medium">{fmt(est)}</button>}</td>
                   <td className={`${tdC} text-right font-medium ${real>0?tl.text:"text-gray-400"}`}>{real>0?fmt(real):"–"}</td>
                   <td className={`${tdC} text-right font-bold ${tl.text}`}>{est>0?pct.toFixed(1)+"%":"–"}</td>
                   <td className={`${tdC} text-right font-semibold ${sel<0?"text-red-600":"text-green-700"}`}>{est>0?(sel>=0?"+ ":"")+fmt(sel):"–"}</td>
@@ -943,7 +961,6 @@ function App(){
             </table></div>
           </div>
 
-          {/* Anomali */}
           {(()=>{
             const anomalies=[];
             EXPENSE_CATS.forEach(cat=>{
@@ -954,15 +971,11 @@ function App(){
               ces.forEach(e=>{const z=std>0?(e.amount-avg)/std:0;if(z>2)anomalies.push({...e,avg,z:z.toFixed(1),diff:e.amount-avg});});
             });
             if(!anomalies.length)return null;
-            return<div className="bg-white rounded-lg border shadow-sm p-4">
-              <div className="text-sm font-bold text-gray-700 mb-2">🚨 Deteksi Anomali Pengeluaran</div>
-              <p className="text-xs text-gray-400 mb-3">Transaksi yang jauh di atas rata-rata kategorinya (Z-score &gt; 2σ)</p>
-              <div className="space-y-2">{anomalies.map(a=><div key={a.id} className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-3"><div><div className="text-sm font-semibold">{a.desc}</div><div className="text-xs text-gray-500">{a.category} · {fmtDate(a.date)} · Z={a.z}σ</div><div className="text-xs text-gray-400">Rata-rata: {fmt(Math.round(a.avg))}</div></div><div className="text-right"><div className="text-sm font-bold text-red-700">{fmt(a.amount)}</div><div className="text-xs text-red-500">+{fmt(Math.round(a.diff))}</div></div></div>)}</div>
-            </div>;
+            return<div className="bg-white rounded-lg border shadow-sm p-4"><div className="text-sm font-bold text-gray-700 mb-2">🚨 Deteksi Anomali Pengeluaran</div><p className="text-xs text-gray-400 mb-3">Transaksi jauh di atas rata-rata kategorinya (Z &gt; 2σ)</p><div className="space-y-2">{anomalies.map(a=><div key={a.id} className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-3"><div><div className="text-sm font-semibold">{a.desc}</div><div className="text-xs text-gray-500">{a.category} · {fmtDate(a.date)} · Z={a.z}σ</div><div className="text-xs text-gray-400">Rata-rata: {fmt(Math.round(a.avg))}</div></div><div className="text-right"><div className="text-sm font-bold text-red-700">{fmt(a.amount)}</div><div className="text-xs text-red-500">+{fmt(Math.round(a.diff))}</div></div></div>)}</div></div>;
           })()}
         </div>}
 
-        {/* ── TAB RUTIN ── */}
+        {/* TAB RUTIN */}
         {activeTab==="rutin"&&<div className="mt-3">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div><h2 className="text-sm font-bold text-gray-700">🔄 Transaksi Rutin Bulanan</h2><p className="text-xs text-gray-400 mt-0.5">Reminder otomatis muncul jika belum dicatat.</p></div>
@@ -982,23 +995,21 @@ function App(){
               <button onClick={()=>setRecurringForm(null)} className="bg-gray-200 text-gray-600 px-3 py-1.5 rounded text-xs">Batal</button>
             </div>
           </div>}
-          {/* Mobile */}
-          <div className="sm:hidden space-y-2">{recurringList.map(r=><div key={r.id} className="bg-white rounded-lg border p-3"><div className="flex justify-between items-start"><div><div className="text-sm font-semibold">{r.desc}</div><div className="text-xs text-gray-500">{r.category} · Tgl {r.dayOfMonth} · {r.pic}</div><div className="text-sm font-bold text-indigo-700">{fmt(r.amount)}</div></div><div className="flex flex-col items-end gap-1"><button onClick={()=>{const u=recurringList.map(x=>x.id===r.id?{...x,active:!x.active}:x);setRecurringList(u);persist(entries,estimates,nextId,u,archives,favorites,auditLog);}} className={`px-2 py-0.5 rounded text-xs font-semibold ${r.active?"bg-green-100 text-green-700":"bg-gray-100 text-gray-400"}`}>{r.active?"✓ Aktif":"✗ Off"}</button><div className="flex gap-1"><button onClick={()=>setRecurringForm({...r,amount:String(r.amount)})} className="text-blue-500 text-xs">✏️</button><button onClick={()=>showConfirm(`Hapus "${r.desc}"?`,()=>{const u=recurringList.filter(x=>x.id!==r.id);setRecurringList(u);persist(entries,estimates,nextId,u,archives,favorites,auditLog);})} className="text-red-400 text-xs">🗑</button><button onClick={()=>recordRecurring(r)} className="text-green-500 text-xs">✅</button></div></div></div></div>)}
+          <div className="sm:hidden space-y-2">{recurringList.map(r=><div key={r.id} className="bg-white rounded-lg border p-3"><div className="flex justify-between items-start"><div><div className="text-sm font-semibold">{r.desc}</div><div className="text-xs text-gray-500">{r.category} · Tgl {r.dayOfMonth} · {r.pic}</div><div className="text-sm font-bold text-indigo-700">{fmt(r.amount)}</div></div><div className="flex flex-col items-end gap-1"><button onClick={()=>{const nr=recurringList.map(x=>x.id===r.id?{...x,active:!x.active}:x);setRecurringList(nr);persistAll(entries,estimates,nextIdRef.current,nr,archives,favorites,auditLog);}} className={`px-2 py-0.5 rounded text-xs font-semibold ${r.active?"bg-green-100 text-green-700":"bg-gray-100 text-gray-400"}`}>{r.active?"✓ Aktif":"✗ Off"}</button><div className="flex gap-1"><button onClick={()=>setRecurringForm({...r,amount:String(r.amount)})} className="text-blue-500 text-xs">✏️</button><button onClick={()=>showConfirm(`Hapus "${r.desc}"?`,()=>{const nr=recurringList.filter(x=>x.id!==r.id);setRecurringList(nr);persistAll(entries,estimates,nextIdRef.current,nr,archives,favorites,auditLog);})} className="text-red-400 text-xs">🗑</button><button onClick={()=>recordRecurring(r)} className="text-green-500 text-xs">✅</button></div></div></div></div>)}
           </div>
-          {/* Desktop */}
           <div className="hidden sm:block bg-white rounded-xl border shadow-sm overflow-hidden">
             <table className="w-full border-collapse text-xs">
               <thead><tr style={{background:"#4f46e5"}}><th className="border border-indigo-400 px-3 py-2 text-left text-white font-semibold">Deskripsi</th><th className="border border-indigo-400 px-3 py-2 text-left text-white font-semibold">Kategori</th><th className="border border-indigo-400 px-3 py-2 text-right text-white font-semibold">Nominal</th><th className="border border-indigo-400 px-3 py-2 text-center text-white font-semibold">Tgl</th><th className="border border-indigo-400 px-3 py-2 text-center text-white font-semibold">PIC</th><th className="border border-indigo-400 px-3 py-2 text-center text-white font-semibold">Status</th><th className="border border-indigo-400 px-3 py-2 text-center text-white font-semibold">Aksi</th></tr></thead>
-              <tbody>{recurringList.length===0?<tr><td colSpan={7} className="text-center py-10 text-gray-400">Belum ada. Klik "＋ Tambah Rutin".</td></tr>:recurringList.map((r,i)=><tr key={r.id} className={`${i%2===0?"bg-white":"bg-gray-50"} hover:bg-indigo-50`}>
+              <tbody>{recurringList.length===0?<tr><td colSpan={7} className="text-center py-10 text-gray-400">Belum ada.</td></tr>:recurringList.map((r,i)=><tr key={r.id} className={`${i%2===0?"bg-white":"bg-gray-50"} hover:bg-indigo-50`}>
                 <td className="border border-gray-200 px-3 py-2 font-medium text-gray-800">{r.desc}</td>
                 <td className="border border-gray-200 px-3 py-2"><span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">{r.category}</span></td>
                 <td className="border border-gray-200 px-3 py-2 text-right font-semibold">{fmt(r.amount)}</td>
                 <td className="border border-gray-200 px-3 py-2 text-center">Tgl {r.dayOfMonth}</td>
                 <td className="border border-gray-200 px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-xs ${r.pic==="Suami"?"bg-blue-100 text-blue-700":r.pic==="Istri"?"bg-pink-100 text-pink-700":"bg-gray-100 text-gray-600"}`}>{r.pic}</span></td>
-                <td className="border border-gray-200 px-3 py-2 text-center"><button onClick={()=>{const u=recurringList.map(x=>x.id===r.id?{...x,active:!x.active}:x);setRecurringList(u);persist(entries,estimates,nextId,u,archives,favorites,auditLog);}} className={`px-2 py-0.5 rounded text-xs font-semibold ${r.active?"bg-green-100 text-green-700":"bg-gray-100 text-gray-400"}`}>{r.active?"✓ Aktif":"✗ Nonaktif"}</button></td>
+                <td className="border border-gray-200 px-3 py-2 text-center"><button onClick={()=>{const nr=recurringList.map(x=>x.id===r.id?{...x,active:!x.active}:x);setRecurringList(nr);persistAll(entries,estimates,nextIdRef.current,nr,archives,favorites,auditLog);}} className={`px-2 py-0.5 rounded text-xs font-semibold ${r.active?"bg-green-100 text-green-700":"bg-gray-100 text-gray-400"}`}>{r.active?"✓ Aktif":"✗ Nonaktif"}</button></td>
                 <td className="border border-gray-200 px-3 py-2 text-center"><div className="flex gap-1.5 justify-center">
                   <button onClick={()=>setRecurringForm({...r,amount:String(r.amount)})} className="text-blue-500 hover:text-blue-700">✏️</button>
-                  <button onClick={()=>showConfirm(`Hapus "${r.desc}"?`,()=>{const u=recurringList.filter(x=>x.id!==r.id);setRecurringList(u);persist(entries,estimates,nextId,u,archives,favorites,auditLog);})} className="text-red-400 hover:text-red-600">🗑</button>
+                  <button onClick={()=>showConfirm(`Hapus "${r.desc}"?`,()=>{const nr=recurringList.filter(x=>x.id!==r.id);setRecurringList(nr);persistAll(entries,estimates,nextIdRef.current,nr,archives,favorites,auditLog);})} className="text-red-400 hover:text-red-600">🗑</button>
                   <button onClick={()=>recordRecurring(r)} className="text-green-500 hover:text-green-700">✅</button>
                 </div></td>
               </tr>)}</tbody>
@@ -1006,57 +1017,37 @@ function App(){
           </div>
         </div>}
 
-        {/* ── TAB ARSIP ── */}
+        {/* TAB ARSIP */}
         {activeTab==="arsip"&&<div className="mt-3">
           {viewArchive?(
             <div>
               <button onClick={()=>setViewArchive(null)} className="text-xs text-violet-600 hover:underline mb-3 block">← Kembali</button>
               <h2 className="text-sm font-bold text-gray-700 mb-1">📁 {viewArchive.label}</h2>
               <p className="text-xs text-gray-400 mb-3">Diarsipkan: {viewArchive.savedAt}</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-                {[{l:"Total Masuk",v:viewArchive.summary.totalIncome,c:"text-green-700",b:"bg-green-50"},{l:"Total Keluar",v:viewArchive.summary.totalExpense,c:"text-red-700",b:"bg-red-50"},{l:"Saldo Kas Utama",v:viewArchive.summary.balance,c:viewArchive.summary.balance>=0?"text-blue-700":"text-red-700",b:"bg-blue-50"},{l:"Total Aset",v:viewArchive.summary.totalAset,c:"text-gray-800",b:"bg-gray-100"}].map(r=><div key={r.l} className={`${r.b} rounded-lg p-3`}><div className="text-xs text-gray-500 mb-1">{r.l}</div><div className={`text-sm font-bold ${r.c}`}>{fmt(r.v)}</div></div>)}
-              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">{[{l:"Total Masuk",v:viewArchive.summary.totalIncome,c:"text-green-700",b:"bg-green-50"},{l:"Total Keluar",v:viewArchive.summary.totalExpense,c:"text-red-700",b:"bg-red-50"},{l:"Saldo Kas Utama",v:viewArchive.summary.balance,c:viewArchive.summary.balance>=0?"text-blue-700":"text-red-700",b:"bg-blue-50"},{l:"Total Aset",v:viewArchive.summary.totalAset,c:"text-gray-800",b:"bg-gray-100"}].map(r=><div key={r.l} className={`${r.b} rounded-lg p-3`}><div className="text-xs text-gray-500 mb-1">{r.l}</div><div className={`text-sm font-bold ${r.c}`}>{fmt(r.v)}</div></div>)}</div>
               <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
                 <div className="bg-violet-600 px-4 py-2 text-white text-xs font-semibold">{viewArchive.entries.length} transaksi (read-only)</div>
-                <div style={{overflowX:"auto",maxHeight:"60vh"}}>
-                  <table className="w-full border-collapse text-xs" style={{minWidth:600}}>
-                    <thead><tr style={{background:"#5b21b6"}}><th className="border border-violet-400 px-2 py-1.5 text-white text-left">#</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Tgl</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Tipe</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Kategori</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Deskripsi</th><th className="border border-violet-400 px-2 py-1.5 text-white text-right">Nominal</th><th className="border border-violet-400 px-2 py-1.5 text-white">PIC</th></tr></thead>
-                    <tbody>{viewArchive.entries.map((e,i)=>{const isI=e.type==="income",isT=e.type==="transfer";return<tr key={e.id} className={i%2===0?"bg-white":"bg-gray-50"}><td className="border border-gray-200 px-2 py-1 text-gray-400 text-center">{i+1}</td><td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{fmtDate(e.date)}</td><td className="border border-gray-200 px-2 py-1"><span className={`px-1.5 py-0.5 rounded text-xs ${isT?"bg-purple-100 text-purple-700":isI?"bg-green-100 text-green-700":"bg-red-100 text-red-700"}`}>{isT?"↔":isI?"⬆":"⬇"}</span></td><td className="border border-gray-200 px-2 py-1 text-gray-600">{e.category}</td><td className="border border-gray-200 px-2 py-1 font-medium">{e.desc}</td><td className={`border border-gray-200 px-2 py-1 text-right font-semibold ${isI?"text-green-700":isT?"text-purple-600":"text-red-600"}`}>{fmt(e.amount)}</td><td className="border border-gray-200 px-2 py-1 text-gray-500">{e.pic}</td></tr>;})}</tbody>
-                  </table>
-                </div>
+                <div style={{overflowX:"auto",maxHeight:"60vh"}}><table className="w-full border-collapse text-xs" style={{minWidth:600}}><thead><tr style={{background:"#5b21b6"}}><th className="border border-violet-400 px-2 py-1.5 text-white text-left">#</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Tgl</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Tipe</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Kategori</th><th className="border border-violet-400 px-2 py-1.5 text-white text-left">Deskripsi</th><th className="border border-violet-400 px-2 py-1.5 text-white text-right">Nominal</th><th className="border border-violet-400 px-2 py-1.5 text-white">PIC</th></tr></thead>
+                <tbody>{viewArchive.entries.map((e,i)=>{const isI=e.type==="income",isT=e.type==="transfer";return<tr key={e.id} className={i%2===0?"bg-white":"bg-gray-50"}><td className="border border-gray-200 px-2 py-1 text-gray-400 text-center">{i+1}</td><td className="border border-gray-200 px-2 py-1 whitespace-nowrap">{fmtDate(e.date)}</td><td className="border border-gray-200 px-2 py-1"><span className={`px-1.5 py-0.5 rounded text-xs ${isT?"bg-purple-100 text-purple-700":isI?"bg-green-100 text-green-700":"bg-red-100 text-red-700"}`}>{isT?"↔":isI?"⬆":"⬇"}</span></td><td className="border border-gray-200 px-2 py-1 text-gray-600">{e.category}</td><td className="border border-gray-200 px-2 py-1 font-medium">{e.desc}</td><td className={`border border-gray-200 px-2 py-1 text-right font-semibold ${isI?"text-green-700":isT?"text-purple-600":"text-red-600"}`}>{fmt(e.amount)}</td><td className="border border-gray-200 px-2 py-1 text-gray-500">{e.pic}</td></tr>;})}
+                </tbody></table></div>
               </div>
             </div>
           ):(
             <div>
               <div className="mb-4"><h2 className="text-sm font-bold text-gray-700">📁 Arsip Periode</h2><p className="text-xs text-gray-400 mt-0.5">Klik <strong>📁 Arsip</strong> di header untuk menyimpan periode aktif.</p></div>
-              {archives.length>=2&&<div className="bg-white rounded-lg border shadow-sm p-4 mb-4">
-                <div className="text-sm font-bold text-gray-700 mb-3">📊 Perbandingan Antar Periode</div>
-                <div className="overflow-x-auto"><table className="w-full border-collapse text-xs">
-                  <thead><tr style={{background:"#5b21b6"}}><th className="border border-violet-400 px-3 py-2 text-white text-left">Periode</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Masuk</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Keluar</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Saldo Kas</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Total Aset</th><th className="border border-violet-400 px-3 py-2 text-white text-center">Transaksi</th></tr></thead>
-                  <tbody>{[...archives].reverse().map((a,i)=><tr key={a.id} className={`${i%2===0?"bg-white":"bg-violet-50"} hover:bg-yellow-50 cursor-pointer`} onClick={()=>setViewArchive(a)}><td className="border border-gray-200 px-3 py-2 font-semibold text-violet-700">{a.label}</td><td className="border border-gray-200 px-3 py-2 text-right text-green-700 font-medium">{fmt(a.summary.totalIncome)}</td><td className="border border-gray-200 px-3 py-2 text-right text-red-600 font-medium">{fmt(a.summary.totalExpense)}</td><td className={`border border-gray-200 px-3 py-2 text-right font-bold ${a.summary.balance>=0?"text-blue-700":"text-red-700"}`}>{fmt(a.summary.balance)}</td><td className={`border border-gray-200 px-3 py-2 text-right font-bold ${a.summary.totalAset>=0?"text-gray-800":"text-red-700"}`}>{fmt(a.summary.totalAset)}</td><td className="border border-gray-200 px-3 py-2 text-center text-gray-500">{a.entries.length} entri</td></tr>)}</tbody>
-                </table></div>
-              </div>}
-              {archives.length===0?<div className="bg-white rounded-lg border p-12 text-center text-gray-400"><div className="text-5xl mb-3">📁</div><div className="text-sm">Belum ada arsip.</div></div>:<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{archives.map(a=><div key={a.id} className="bg-white border border-violet-200 rounded-xl p-4 hover:shadow-md cursor-pointer" onClick={()=>setViewArchive(a)}>
-                <div className="flex justify-between mb-2"><div><div className="text-sm font-bold text-violet-700">📁 {a.label}</div><div className="text-xs text-gray-400">{fmtDate(a.from)} s/d {fmtDate(a.to)}</div></div><button onClick={e=>{e.stopPropagation();showConfirm(`Hapus arsip "${a.label}"?`,()=>{const u=archives.filter(x=>x.id!==a.id);setArchives(u);persist(entries,estimates,nextId,recurringList,u,favorites,auditLog);});}} className="text-red-300 hover:text-red-500 text-xs">🗑</button></div>
-                <div className="space-y-1 text-xs"><div className="flex justify-between"><span className="text-gray-500">Masuk</span><span className="text-green-700 font-medium">{fmt(a.summary.totalIncome)}</span></div><div className="flex justify-between"><span className="text-gray-500">Keluar</span><span className="text-red-600 font-medium">{fmt(a.summary.totalExpense)}</span></div><div className="flex justify-between border-t pt-1"><span className="text-gray-500">Total Aset</span><span className={`font-bold ${a.summary.totalAset>=0?"text-gray-800":"text-red-700"}`}>{fmt(a.summary.totalAset)}</span></div></div>
-                <div className="mt-2 text-xs text-gray-400">{a.entries.length} transaksi</div>
-              </div>)}</div>}
+              {archives.length>=2&&<div className="bg-white rounded-lg border shadow-sm p-4 mb-4"><div className="text-sm font-bold text-gray-700 mb-3">📊 Perbandingan Antar Periode</div><div className="overflow-x-auto"><table className="w-full border-collapse text-xs"><thead><tr style={{background:"#5b21b6"}}><th className="border border-violet-400 px-3 py-2 text-white text-left">Periode</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Masuk</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Keluar</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Saldo Kas</th><th className="border border-violet-400 px-3 py-2 text-white text-right">Total Aset</th><th className="border border-violet-400 px-3 py-2 text-white text-center">Transaksi</th></tr></thead><tbody>{[...archives].reverse().map((a,i)=><tr key={a.id} className={`${i%2===0?"bg-white":"bg-violet-50"} hover:bg-yellow-50 cursor-pointer`} onClick={()=>setViewArchive(a)}><td className="border border-gray-200 px-3 py-2 font-semibold text-violet-700">{a.label}</td><td className="border border-gray-200 px-3 py-2 text-right text-green-700 font-medium">{fmt(a.summary.totalIncome)}</td><td className="border border-gray-200 px-3 py-2 text-right text-red-600 font-medium">{fmt(a.summary.totalExpense)}</td><td className={`border border-gray-200 px-3 py-2 text-right font-bold ${a.summary.balance>=0?"text-blue-700":"text-red-700"}`}>{fmt(a.summary.balance)}</td><td className={`border border-gray-200 px-3 py-2 text-right font-bold ${a.summary.totalAset>=0?"text-gray-800":"text-red-700"}`}>{fmt(a.summary.totalAset)}</td><td className="border border-gray-200 px-3 py-2 text-center text-gray-500">{a.entries.length} entri</td></tr>)}</tbody></table></div></div>}
+              {archives.length===0?<div className="bg-white rounded-lg border p-12 text-center text-gray-400"><div className="text-5xl mb-3">📁</div><div className="text-sm">Belum ada arsip.</div></div>:<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{archives.map(a=><div key={a.id} className="bg-white border border-violet-200 rounded-xl p-4 hover:shadow-md cursor-pointer" onClick={()=>setViewArchive(a)}><div className="flex justify-between mb-2"><div><div className="text-sm font-bold text-violet-700">📁 {a.label}</div><div className="text-xs text-gray-400">{fmtDate(a.from)} s/d {fmtDate(a.to)}</div></div><button onClick={e=>{e.stopPropagation();showConfirm(`Hapus arsip "${a.label}"?`,()=>{const na=archives.filter(x=>x.id!==a.id);setArchives(na);persistAll(entries,estimates,nextIdRef.current,recurringList,na,favorites,auditLog);});}} className="text-red-300 hover:text-red-500 text-xs">🗑</button></div><div className="space-y-1 text-xs"><div className="flex justify-between"><span className="text-gray-500">Masuk</span><span className="text-green-700 font-medium">{fmt(a.summary.totalIncome)}</span></div><div className="flex justify-between"><span className="text-gray-500">Keluar</span><span className="text-red-600 font-medium">{fmt(a.summary.totalExpense)}</span></div><div className="flex justify-between border-t pt-1"><span className="text-gray-500">Total Aset</span><span className={`font-bold ${a.summary.totalAset>=0?"text-gray-800":"text-red-700"}`}>{fmt(a.summary.totalAset)}</span></div></div><div className="mt-2 text-xs text-gray-400">{a.entries.length} transaksi</div></div>)}</div>}
             </div>
           )}
         </div>}
 
-        {/* ── TAB AUDIT ── */}
+        {/* TAB AUDIT */}
         {activeTab==="audit"&&<div className="mt-3">
           <div className="flex items-center justify-between mb-4">
             <div><h2 className="text-sm font-bold text-gray-700">📜 Audit Log</h2><p className="text-xs text-gray-400">50 aktivitas terakhir</p></div>
-            {auditLog.length>0&&<button onClick={()=>showConfirm("Hapus semua log?",()=>{setAuditLog([]);persist(entries,estimates,nextId,recurringList,archives,favorites,[]);})} className="text-xs text-red-400 hover:text-red-600">🗑 Hapus Log</button>}
+            {auditLog.length>0&&<button onClick={()=>showConfirm("Hapus semua log?",()=>{setAuditLog([]);persistAll(entries,estimates,nextIdRef.current,recurringList,archives,favorites,[]);})} className="text-xs text-red-400 hover:text-red-600">🗑 Hapus Log</button>}
           </div>
-          {auditLog.length===0?<div className="bg-white rounded-lg border p-10 text-center text-gray-400"><div className="text-4xl mb-2">📜</div><div className="text-sm">Belum ada aktivitas.</div></div>:<div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-            <table className="w-full border-collapse text-xs">
-              <thead><tr style={{background:"#374151"}}><th className="border border-gray-600 px-3 py-2 text-left text-white">Waktu</th><th className="border border-gray-600 px-3 py-2 text-left text-white">Aksi</th><th className="border border-gray-600 px-3 py-2 text-left text-white">Detail</th></tr></thead>
-              <tbody>{auditLog.map((log,i)=><tr key={log.id} className={i%2===0?"bg-white":"bg-gray-50"}><td className="border border-gray-200 px-3 py-2 text-gray-500 whitespace-nowrap">{log.time}</td><td className="border border-gray-200 px-3 py-2"><span className={`px-2 py-0.5 rounded text-xs font-semibold ${log.action==="ADD"?"bg-green-100 text-green-700":log.action==="EDIT"?"bg-blue-100 text-blue-700":"bg-red-100 text-red-700"}`}>{log.action==="ADD"?"✅ Tambah":log.action==="EDIT"?"✏️ Edit":"🗑 Hapus"}</span></td><td className="border border-gray-200 px-3 py-2 text-gray-700">{log.desc}</td></tr>)}</tbody>
-            </table>
-          </div>}
+          {auditLog.length===0?<div className="bg-white rounded-lg border p-10 text-center text-gray-400"><div className="text-4xl mb-2">📜</div><div className="text-sm">Belum ada aktivitas.</div></div>:<div className="bg-white rounded-lg border shadow-sm overflow-hidden"><table className="w-full border-collapse text-xs"><thead><tr style={{background:"#374151"}}><th className="border border-gray-600 px-3 py-2 text-left text-white">Waktu</th><th className="border border-gray-600 px-3 py-2 text-left text-white">Aksi</th><th className="border border-gray-600 px-3 py-2 text-left text-white">Detail</th></tr></thead><tbody>{auditLog.map((log,i)=><tr key={log.id} className={i%2===0?"bg-white":"bg-gray-50"}><td className="border border-gray-200 px-3 py-2 text-gray-500 whitespace-nowrap">{log.time}</td><td className="border border-gray-200 px-3 py-2"><span className={`px-2 py-0.5 rounded text-xs font-semibold ${log.action==="ADD"?"bg-green-100 text-green-700":log.action==="EDIT"?"bg-blue-100 text-blue-700":"bg-red-100 text-red-700"}`}>{log.action==="ADD"?"✅ Tambah":log.action==="EDIT"?"✏️ Edit":"🗑 Hapus"}</span></td><td className="border border-gray-200 px-3 py-2 text-gray-700">{log.desc}</td></tr>)}</tbody></table></div>}
         </div>}
       </div>
 
@@ -1064,7 +1055,7 @@ function App(){
 
       <div className="max-w-screen-2xl mx-auto px-4 py-3 pb-6 no-print">
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-          <strong>💡 Info:</strong> Data tersimpan otomatis ke Firebase ☁️. <strong>💾 Backup</strong> untuk ekspor JSON. <strong>🔒 Kunci</strong> untuk mengunci layar. <strong>⭐</strong> untuk favorit. Tab <strong>🔄 Rutin</strong> untuk tagihan berulang. Tab <strong>📜 Log</strong> untuk audit trail.
+          <strong>💡 Info:</strong> Data tersimpan otomatis ke Firebase ☁️. <strong>💾 Backup</strong> untuk ekspor JSON. <strong>🔒 Kunci</strong> untuk mengunci layar. <strong>⭐</strong> untuk favorit. Tab <strong>🔄 Rutin</strong> untuk tagihan berulang.
           {fbStatus==="error"&&<span className="ml-2 text-red-600">⚠️ Firebase offline — data tersimpan lokal.</span>}
         </div>
       </div>
